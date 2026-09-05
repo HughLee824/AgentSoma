@@ -129,3 +129,5 @@ Runner spike 的固定 900 秒上限仍用于独立探针；CLI 启动 Runner �
 其后 Swift 探针实测 Foundation `Process` 管理 xcodebuild，以及 Network.framework 到 CoreDevice Runner 的通信。再后的最小 CLI 实现已验证后台宿主、本地 Unix IPC 与 ArgumentParser 接入；两类证据区分见 [宿主验收](session-host.md)。
 
 依赖策略继续区分系统能力、代码库依赖和用户需安装的外部工具。当前方案不把 Python、Node、iproxy 或 pymobiledevice3 列为产品运行前提；v0.1 已接受的 Xcode、签名与 Apple 设备工具要求仍保留。跨平台宿主与完整免 Xcode 安装均不由本次语言选型承诺。后续工作顺序见 [v0.1 实现计划](v0.1-plan.md)。
+
+独立 Runner 工程现已纳入仓库，build-runner 直接使用 Apple 构建和签名工具；正式接入无需 XcodeGen，也不构建 Fixture 或固定探针测试。构建与首次安装证据见 [首次接入](onboarding.md)。

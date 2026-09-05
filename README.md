@@ -20,9 +20,11 @@ swift test
 
 唯一源码库依赖是锁定为 1.5.0 的 [Swift ArgumentParser](https://github.com/apple/swift-argument-parser/tree/1.5.0)，可由当前工具链编译；没有 iproxy、pymobiledevice3、Python 或 Node 运行依赖。
 
-本阶段复用 [XCTest 探针工程](spikes/ios-xctest/README.md) 已签名的构建。先在 Xcode 配置自己的开发团队并构建 Runner，保持设备解锁、USB 连接。CLI 暂时通过 `--xctestrun` 接收构建路径，自动构建与首次安装引导留待后续实现。
+Runner 使用仓库内的[独立 Xcode 工程](Runner/AgentSomaRunner.xcodeproj/project.pbxproj)，只构建会话测试，不带 Fixture 或固定探针测试，也不需要 XcodeGen。首次使用需在 Xcode 配置自己的开发团队和签名，并让设备信任 Mac、启用 Developer Mode。具体步骤与错误处理见[首次接入](docs/onboarding.md)。以下命令由外部 agent 执行；用户不需要手动操作截图、点击或输入命令。
 
 ```sh
+.build/debug/agentsoma build-runner --team "$APPLE_TEAM_ID"
+# 将结果中的 xctestrun 完整路径用于下面的 SIGNED_XCTESTRUN。
 .build/debug/agentsoma devices
 .build/debug/agentsoma connect \
   --device "$IOS_UDID" \
@@ -30,8 +32,8 @@ swift test
 
 # 使用 connect 实际返回的 session。
 .build/debug/agentsoma --session "$SESSION" status
-.build/debug/agentsoma --session "$SESSION" apps --query AgentSoma
-.build/debug/agentsoma --session "$SESSION" open com.somnus.agentsoma.spike.fixture
+.build/debug/agentsoma --session "$SESSION" apps --query Settings
+.build/debug/agentsoma --session "$SESSION" open com.apple.Preferences
 .build/debug/agentsoma --session "$SESSION" observe
 # agent 读取返回的 PNG；使用实际返回的观察 / 元素引用。
 .build/debug/agentsoma --session "$SESSION" inspect o1:e9
@@ -41,9 +43,9 @@ swift test
 .build/debug/agentsoma --session "$SESSION" disconnect
 ```
 
-`connect` 在宿主和 Runner 均可响应后返回，agent 不需要单独启动后台服务。每条 CLI 命令结束后，宿主继续持有原 XCTest 会话。会话结束后，宿主释放自己的 xcodebuild/Runner 资源并退出。
+`build-runner` 使用当前选中的 Xcode 构建并验证签名，返回实际 SDK 对应的 `.xctestrun` 路径。每次构建使用独立目录，已有构建可供后续会话复用。`connect` 通过 Xcode 安装并启动该 Runner，在宿主和 Runner 均可响应后返回，agent 不需要单独启动后台服务。每条 CLI 命令结束后，宿主继续持有原 XCTest 会话。会话结束后，宿主释放自己的 xcodebuild/Runner 资源并退出。
 
-当前提供 `devices`、`connect`、`status`、`apps`、`open`、`observe`、`inspect`、`tap`、`swipe`、`type`、`disconnect`。`devices` 返回 CoreDevice 已知设备和原生连接状态，connect 检查是否能建立会话；`apps` 查询已安装 App 的名称和 bundle ID，支持 `--query` 筛选，每页最多 50 项，按返回的 `nextOffset` 继续读取。见 [发现接口与完整调用验收](docs/discovery.md)。
+当前提供 `build-runner`、`devices`、`connect`、`status`、`apps`、`open`、`observe`、`inspect`、`tap`、`swipe`、`type`、`disconnect`。`devices` 返回 CoreDevice 已知设备和原生连接状态，connect 检查是否能建立会话；`apps` 查询已安装 App 的名称和 bundle ID，支持 `--query` 筛选，每页最多 50 项，按返回的 `nextOffset` 继续读取。见 [发现接口与完整调用验收](docs/discovery.md)。
 
 `open` 已移除临时 App 白名单；宿主先检查安装状态，再由 Runner 激活已运行的 App，未运行时启动。未安装的 App 在派发前拒绝。`observe` 返回截图路径及紧凑 AX 文本，`inspect` 展开同一缓存快照；动作在设备端确认目标后执行。见 [观察契约](docs/observations.md) 和 [动作接口与验收](docs/actions.md)。
 

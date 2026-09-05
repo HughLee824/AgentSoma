@@ -43,7 +43,7 @@
 
 - `Fixture/FixtureApp.swift`：本地测试页，提供计数按钮、文本框和滚动列表，不使用用户的文档或账号。
 - `Tests/AgentSomaTests.swift`：仅调用 Apple XCTest API，验证点击、英文/中文输入、滑动和跨 App 计算器操作。
-- `project.yml`：XcodeGen 工程定义，无第三方包依赖。
+- `project.yml`：XcodeGen 探针工程定义，无第三方包依赖；会话测试引用 `../../Runner/LiveSessionTests.swift`，避免维护两份实现。正式 Runner 使用[独立 Xcode 工程与 build-runner](../../docs/onboarding.md)，不需要生成此探针工程。
 - `run.py`：实验性的 pymobiledevice3 XCTest 启动器，保留设备初始化错误和用例结果。Xcode 自带的 `test-without-building` 是对照启动路径。
 
 DeviceKit 源码检查采用 `c6a61f406d0b894bfa5864fb950eb5f8f3a20b99`。其中包含带 Facebook 版权声明的 FBConfiguration 及 WDA 相关辅助实现，因此本轮使用自行编写的最小 Runner。DeviceKit 没有被编译、链接或安装。

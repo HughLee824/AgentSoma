@@ -1,6 +1,6 @@
 # AgentSoma 最小 agent 接口草案
 
-状态：需求与接口记录。2026-09-05 已实现 devices、connect、status、apps、open、observe、inspect、tap、swipe、type、disconnect 及会话宿主；生命周期、观察、缓存、引用失效、目标校验、动作结果和完整 agent 调用均经过本地与真机验证。已移除临时 App 白名单，仍要求预构建和签名的 --xctestrun。发现与分页见 [发现契约](discovery.md)；当前观察与动作契约见 [观察验收](observations.md)、[动作验收](actions.md) 和 [使用说明](../README.md)。下文逻辑能力与历史 JSON 示例仍用于解释语义，不代替实际 CLI 参数。
+状态：需求与接口记录。2026-09-05 已实现 build-runner、devices、connect、status、apps、open、observe、inspect、tap、swipe、type、disconnect 及会话宿主；生命周期、观察、缓存、引用失效、目标校验、动作结果和完整 agent 调用均经过本地与真机验证。已移除临时 App 白名单，build-runner 已可构建并验证独立 Runner，为 connect 返回签名产物路径，见 [首次接入](onboarding.md)。发现与分页见 [发现契约](discovery.md)；当前观察与动作契约见 [观察验收](observations.md)、[动作验收](actions.md) 和 [使用说明](../README.md)。下文逻辑能力与历史 JSON 示例仍用于解释语义，不代替实际 CLI 参数。
 
 已确认的职责是：用户用自然语言提出任务，外部 agent 调用设备操作，AgentSoma 返回观察或执行结果。测试只是调用场景之一。MVP 接受首次在 Xcode 配置签名。当前讨论的 CLI 面向 agent；日常不要求人手工敲命令，并不排除 agent 执行 CLI。
 
@@ -129,6 +129,7 @@ MCP 的原生图像结果、工具发现和结构化参数仍是可比较的优�
 七项逻辑能力已映射成直接的 CLI 子命令：设备发现为 `devices`，App 发现为 `apps`，其余调用为 `connect`、`open`、`observe`、`tap`、`type`、`inspect`、`swipe` 与 `disconnect`。会话参数统一用 `--session`，在命令中显式选择会话。apps 可用 `--query` 对名称/bundle ID 做子串筛选，以 `--offset` 翻页，每页最多 50 项；查询不改变观察引用。
 
 ```sh
+agentsoma build-runner --source-root <agentsoma-checkout> --team <team-id> # 返回实际 xctestrun 路径
 agentsoma devices
 agentsoma connect --device <device-id> --xctestrun <signed-runner.xctestrun> # 假设返回 session=s1
 agentsoma --session s1 apps
@@ -156,4 +157,4 @@ agentsoma --session s1 disconnect
 
 本草案不是对现有 spike API 的直接改名。当前 open 激活运行中的 App；open 和设备动作均根据 Runner 执行阶段提供三态结果，缺失或矛盾的事实保守归为 unknown。观察已整合可确认的已打开 App、唯一 App/SpringBoard Alert 及未知前台时的截图；动作会检查对应上下文与实时目标。设备/App 发现与安装前置检查已在 Mac 实现；独立的未知前台身份识别尚未解决，应如实暴露限制。
 
-首版 agent 入口为 CLI，最小 Swift 宿主已使用 Foundation 进程管理、Unix 域套接字与 JSON、ArgumentParser 落地；CoreDevice 直连及生命周期已在当前环境验证。自有薄 XCTest Runner 是当前设备后端。宿主观察、引用、动作、目标校验、发现入口与完整调用验收已通过，探针 App 白名单已移除。自动构建与首次安装引导仍待实现，见 [v0.1 实现计划](v0.1-plan.md)。
+首版 agent 入口为 CLI，最小 Swift 宿主已使用 Foundation 进程管理、Unix 域套接字与 JSON、ArgumentParser 落地；CoreDevice 直连及生命周期已在当前环境验证。自有薄 XCTest Runner 是当前设备后端。宿主观察、引用、动作、目标校验、发现入口与完整调用验收已通过，探针 App 白名单已移除。独立 Runner 构建与首次安装也已通过；仍使用用户自己的 Mac/Xcode 签名环境，见 [首次接入](onboarding.md)。

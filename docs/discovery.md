@@ -60,4 +60,4 @@ Runner 只检查 bundle ID 格式，封装 XCTest 的 activate/launch、前台�
 
 ## 当前边界
 
-默认发现入口、按会话调用和通用 App 打开已实现；接入仍需要本机 Xcode 签名环境与已构建的 `--xctestrun`。自动构建和首次安装引导尚未完成。当前结果不证明免 Xcode 部署、完全移除 Runner、物理重连自动恢复或任意 App 的全部操作兼容性；后续仍按已接受的优先级推进。
+默认发现入口、按会话调用和通用 App 打开已实现。本轮验收时接入仍使用预构建 `--xctestrun`；后续已增加独立 Runner 的 build-runner 命令并验证首次安装，见 [接入说明](onboarding.md)。仍需要本机 Xcode 签名环境。当前结果不证明免 Xcode 部署、完全移除 Runner、物理重连自动恢复或任意 App 的全部操作兼容性；后续仍按已接受的优先级推进。

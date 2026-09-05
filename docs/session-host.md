@@ -7,7 +7,7 @@
 ## 实现范围
 
 - 同一 Swift 可执行文件提供 CLI 和内部宿主入口；Foundation Process 管理 xcodebuild，Network.framework 提供 Unix IPC 与 CoreDevice IPv6 通信。
-- 提供 connect、status、open、disconnect，运行结果为单行 JSON。connect 暂时需要 `--xctestrun` 指向已签名构建。
+- 提供 connect、status、open、disconnect，运行结果为单行 JSON。connect 使用 `--xctestrun` 指向已签名构建；后续 [build-runner](onboarding.md) 已提供该产物路径。
 - 每次连接重新发现 CoreDevice 地址，并按规范 UDID 加文件锁；不同设备别名不能绕过同一状态目录内的重复连接检查。
 - 默认空闲 1800 秒，可以调整。就绪和有效命令完成后开始计时；已接收、排队与执行中的命令不被空闲回收。status 仅健康检查，不续期；目前没有额外后台保活轮询。
 - 所有设备请求串行处理；开始清理后停止接收新请求，等待已经接收的命令结束。断开完成或到期后删除 socket、退出宿主，旧 session 不再可用。
