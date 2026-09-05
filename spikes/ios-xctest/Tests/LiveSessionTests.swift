@@ -146,7 +146,7 @@ final class LiveSessionTests: XCTestCase {
         if op == "ping" {
             let hostManaged = ProcessInfo.processInfo.environment["AGENTSOMA_HOST_MANAGED"] == "1"
             return ["protocol": "agentsoma-spike-jsonl-v1", "lifecycleOwner": hostManaged ? "host" : "spike",
-                    "lifetimeLimitSeconds": hostManaged ? NSNull() : 900]
+                    "lifetimeLimitSeconds": hostManaged ? NSNull() : 900, "observationVersion": 1]
         }
         if op == "shutdown" { return ["stopped": true] }
         if op == "launch" {
@@ -160,6 +160,19 @@ final class LiveSessionTests: XCTestCase {
             currentApp = app
             currentBundleID = bundle
             return ["bundleId": bundle, "appState": app.state.rawValue]
+        }
+        if op == "observe" {
+            let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+            let alerts = springboard.alerts
+            let count = alerts.count
+            if count == 1 {
+                return observe(springboard, root: alerts.firstMatch, scope: "systemAlert")
+            }
+            if count == 0, let app = currentApp, app.state == .runningForeground {
+                return observe(app, root: app, scope: "app")
+            }
+            return observe(nil, root: nil, scope: "unknown",
+                           error: count > 1 ? "multiple_system_alerts" : "foreground_app_unknown")
         }
         guard var app = currentApp else { throw CommandError("launch_an_app_first") }
         let scope = command["scope"] as? String ?? "app"
@@ -177,7 +190,6 @@ final class LiveSessionTests: XCTestCase {
             root = alerts.firstMatch
         default: throw CommandError("unknown_scope")
         }
-        if op == "observe" { return try observe(app, root: root, scope: scope) }
         if op == "tap", let x = command["x"] as? Double, let y = command["y"] as? Double {
             guard command["identifier"] == nil, x.isFinite, y.isFinite,
                   root.frame.contains(CGPoint(x: x, y: y)) else { throw CommandError("invalid_screen_point") }
@@ -218,11 +230,11 @@ final class LiveSessionTests: XCTestCase {
     }
 
     @MainActor
-    private func observe(_ app: XCUIApplication, root: XCUIElement, scope: String) throws -> [String: Any] {
+    private func observe(_ app: XCUIApplication?, root: XCUIElement?, scope: String, error: String? = nil) -> [String: Any] {
         let snapshotTime = Date().timeIntervalSince1970
-        let snapshot = try root.snapshot()
         var nodes: [[String: Any]] = []
         var truncated = false
+        var axError = error
         func visit(_ node: XCUIElementSnapshot, parent: Int?) {
             guard nodes.count < 200 else { truncated = true; return }
             let index = nodes.count
@@ -235,13 +247,23 @@ final class LiveSessionTests: XCTestCase {
             ])
             node.children.forEach { visit($0, parent: index) }
         }
-        visit(snapshot, parent: nil)
+        if let root {
+            do { visit(try root.snapshot(), parent: nil) }
+            catch { axError = String(describing: error) }
+        }
+        let snapshotFinished = Date().timeIntervalSince1970
         let screenshot = XCUIScreen.main.screenshot()
+        let frame = app?.frame
         return [
-            "bundleId": scope == "systemAlert" ? "com.apple.springboard" : currentBundleID ?? "",
-            "targetBundleId": currentBundleID ?? "", "scope": scope, "appState": app.state.rawValue,
+            "bundleId": scope == "systemAlert" ? "com.apple.springboard" : (scope == "app" ? currentBundleID as Any? ?? NSNull() : NSNull()),
+            "targetBundleId": currentBundleID as Any? ?? NSNull(), "scope": scope,
+            "foregroundBundleId": scope == "app" ? currentBundleID as Any? ?? NSNull() : NSNull(),
+            "appState": app.map { $0.state.rawValue as Any } ?? NSNull(),
+            "screenFrame": frame.map { ["x": $0.minX, "y": $0.minY, "width": $0.width, "height": $0.height] as Any } ?? NSNull(),
             "coordinateSpace": "screen_points", "nodes": nodes, "truncated": truncated,
-            "snapshotStartedAt": snapshotTime, "screenshotCapturedAt": Date().timeIntervalSince1970,
+            "axStatus": nodes.isEmpty ? "unavailable" : "available", "axError": axError as Any? ?? NSNull(),
+            "snapshotStartedAt": snapshotTime, "snapshotFinishedAt": snapshotFinished,
+            "screenshotCapturedAt": Date().timeIntervalSince1970,
             "screenshotWidth": screenshot.image.size.width * screenshot.image.scale,
             "screenshotHeight": screenshot.image.size.height * screenshot.image.scale,
             "screenshotBase64": screenshot.pngRepresentation.base64EncodedString()
