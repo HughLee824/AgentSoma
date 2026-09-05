@@ -1,0 +1,8 @@
+/spikes/ios-direct/evidence/
+/spikes/ios-xctest/vendor/
+/spikes/ios-xctest/build/
+/spikes/ios-xctest/evidence/
+/spikes/ios-xctest/AgentSomaSpike.xcodeproj/
+__pycache__/
+/.build/
+/.swiftpm/
