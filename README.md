@@ -33,25 +33,30 @@ swift test
 .build/debug/agentsoma --session "$SESSION" observe
 # agent 读取返回的 PNG；使用实际返回的观察 / 元素引用。
 .build/debug/agentsoma --session "$SESSION" inspect o1:e9
+# 每次动作使用最新观察中实际取得的引用，完成后再次 observe。
+.build/debug/agentsoma --session "$SESSION" tap o1:e9
+.build/debug/agentsoma --session "$SESSION" observe
 .build/debug/agentsoma --session "$SESSION" disconnect
 ```
 
 `connect` 在宿主和 Runner 均可响应后返回，agent 不需要单独启动后台服务。每条 CLI 命令结束后，宿主继续持有原 XCTest 会话。会话结束后，宿主释放自己的 xcodebuild/Runner 资源并退出。
 
-当前提供 `connect`、`status`、`open`、`observe`、`inspect`、`disconnect`。`open` 激活已运行的 App，未运行时启动；临时复用的探针 Runner 仍只允许 Fixture 与 Calculator。这个限制不属于计划中的产品 App 范围。`observe` 返回截图路径及紧凑 AX 文本，`inspect` 展开同一缓存快照。按引用点击、滑动和输入是下一阶段；见 [观察验收与具体契约](docs/observations.md)。
+当前提供 `connect`、`status`、`open`、`observe`、`inspect`、`tap`、`swipe`、`type`、`disconnect`。`open` 激活已运行的 App，未运行时启动；临时复用的探针 Runner 仍只允许 Fixture 与 Calculator。这个限制不属于计划中的产品 App 范围。`observe` 返回截图路径及紧凑 AX 文本，`inspect` 展开同一缓存快照；动作在设备端确认目标后执行。见 [观察契约](docs/observations.md) 和 [动作接口与验收](docs/actions.md)。设备/App 发现与移除临时范围限制是下一阶段。
+
+`type oN:eN --mode insert --text ...` 保留现有光标，需要输入框已有键盘焦点；需要聚焦时先 tap、再 observe。`--mode replace` 聚焦并替换全部内容，空字符串表示清空，两种模式都不自动提交。`swipe oN:eN --direction up` 的方向表示手指移动方向；坐标点击使用 `tap oN --x X --y Y`，单位为屏幕点。
 
 ## 生命周期与输出
 
 - 默认空闲 **30 分钟**；建立连接时可用 `--idle-timeout 60m` 调整，也接受 `s`、`m`、`h`，便于用短时间验收。
-- 有效 `open` 请求完成后续期，包括执行结果未知的请求。参数检查失败不续期。成功的 observe / inspect 也在完成后续期，失败的 inspect 不续期。
+- 有效 `open` 和通过本地引用解析的动作请求完成后续期，包括执行结果未知的请求。参数检查或本地引用解析失败不续期。成功的 observe / inspect 也在完成后续期，失败的 inspect 不续期。
 - 已接收、排队或执行中的命令不被空闲回收；`disconnect` 等待已经接收的命令结束，再清理会话。
 - `status` 检查 Runner 并返回剩余空闲时间，不续期。当前没有额外内部保活轮询。
 - observe / inspect 成功时输出多行文本，其余结果与运行错误为单行 JSON。成功退出码为 0，运行失败为 1；参数语法错误由 ArgumentParser 输出到 stderr 并非零退出。
-- `open` 返回 `completed`、`not_dispatched` 或 `unknown`。当前探针没有完整执行阶段信息，Runner 错误保守归为 `unknown`；连接中断或丢失响应不自动重发。
+- `open`、`tap`、`swipe`、`type` 返回 `completed`、`not_dispatched` 或 `unknown`。Runner 在进入可发送输入的 API 前记录执行阶段，宿主据此区分执行前拒绝与可能已产生影响；缺失事实、连接中断或丢失响应按保守结果处理，不自动重发。
 
 状态目录默认为 `/private/tmp/agentsoma-<uid>`，目录权限 0700；可通过 `AGENTSOMA_STATE_DIR` 设置较短的替代路径。每个会话包含本地 Unix socket、启动配置和诊断文件。设备 token 只保存在宿主内存及 XCTest 子进程环境，不写入配置文件或 CLI 输出。相同状态目录内对设备规范 UDID 使用系统文件锁，拒绝重复占用；锁文件保留，锁本身随持有进程退出而释放。
 
-观察默认最多 60 行、8 KiB，超预算内容明确提示并可 inspect；源采集最多 200 个节点，未采集部分不能从旧快照补取。宿主只缓存最近两次观察。open 正常完成或 unknown 后旧引用失效；读取旧快照不恢复引用。截图与 AX 分开采集，不保证界面已稳定，agent 可根据截图再 observe。
+观察默认最多 60 行、8 KiB，超预算内容明确提示并可 inspect；源采集最多 200 个节点，未采集部分不能从旧快照补取。宿主只缓存最近两次观察。open 或设备动作正常完成、结果 unknown 后旧引用失效；确认目标已变化时同样失效，读取旧快照不恢复引用。截图与 AX 分开采集，不保证界面已稳定，agent 可根据截图再 observe。
 
 断开或到期后 socket 和观察缓存删除，原 session 不能继续调用。诊断文件暂时保留供开发排查，清理这些文件不负责断开活跃会话。当前不承诺宿主遭 SIGKILL、Mac 重启、物理断线或设备锁屏后的自动恢复；也不依据磁盘里的 PID 自动重连或重放请求。
 

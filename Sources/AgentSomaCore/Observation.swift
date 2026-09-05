@@ -119,7 +119,7 @@ final class ObservationCache {
         return result(entry, detail: (reference, indices, offset))
     }
 
-    // Future actions must also validate the returned target against the live device.
+    // A current reference is only a candidate: the backend must validate it on the live device.
     func resolveCurrent(_ reference: ObservationReference) throws -> AXNode {
         guard let entry = entries.first(where: { $0.id == reference.observation }), currentID == entry.id else {
             throw SomaError("stale_reference", "Observe again before using this reference for an action")
@@ -128,6 +128,34 @@ final class ObservationCache {
             throw SomaError("node_not_captured", "An element captured in this observation is required")
         }
         return entry.capture.nodes[index]
+    }
+
+    func resolveTarget(for action: DeviceAction) throws -> ObservedTarget {
+        let reference = action.reference
+        guard let entry = entries.first(where: { $0.id == reference.observation }), currentID == entry.id else {
+            throw SomaError("stale_reference", "Observe again before using this reference for an action")
+        }
+        guard let scope = entry.capture.metadata["scope"] as? String, ["app", "appAlert", "systemAlert"].contains(scope),
+              !entry.capture.nodes.isEmpty else { throw SomaError("target_context_unknown", "Observe a known app or alert before acting") }
+        var index = 0
+        if !action.coordinate {
+            let node = try resolveCurrent(reference)
+            if action.kind == "type", !["text_field", "secure_text_field", "text_view", "search_field"].contains(node.role) {
+                throw SomaError("not_text_input", "The reference must identify a text input")
+            }
+            index = node.index
+        }
+        var path: [[String: Any]] = []
+        while true {
+            let node = entry.capture.nodes[index]
+            var step = node.attributes
+            step.removeValue(forKey: "index"); step.removeValue(forKey: "parent")
+            step["childIndex"] = node.parent.map { parent in entry.capture.nodes[..<index].filter { $0.parent == parent }.count } ?? 0
+            path.insert(step, at: 0)
+            guard let parent = node.parent else { break }
+            index = parent
+        }
+        return ObservedTarget(context: entry.capture.metadata, path: path)
     }
 
     func clear() throws {

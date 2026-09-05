@@ -8,6 +8,7 @@ protocol SessionBackend: AnyObject {
     func status() throws -> [String: Any]
     func open(bundle: String) throws -> [String: Any]
     func observe() throws -> CapturedObservation
+    func perform(_ action: DeviceAction, target: ObservedTarget) throws -> [String: Any]
     func stop() -> [String: Any]
 }
 
@@ -68,8 +69,9 @@ final class XCTestBackend: SessionBackend {
             // Only startup health checks retry. No UI command is sent until readiness succeeds.
             if let response = try? request("ping", timeout: 1), response["ok"] as? Bool == true,
                let result = response["result"] as? [String: Any] {
-                guard result["lifecycleOwner"] as? String == "host", result["observationVersion"] as? Int == 1 else {
-                    throw SomaError("runner_needs_rebuild", "Rebuild the Runner with host-managed lifetime and observation support")
+                guard result["lifecycleOwner"] as? String == "host", result["observationVersion"] as? Int == 1,
+                      result["actionVersion"] as? Int == 1 else {
+                    throw SomaError("runner_needs_rebuild", "Rebuild the Runner with current observation and action support")
                 }
                 identity = response["sessionId"] as? String
                 runnerPID = response["runnerPid"] as? Int
@@ -131,11 +133,17 @@ final class XCTestBackend: SessionBackend {
 
     func open(bundle: String) throws -> [String: Any] {
         let response = try request("launch", fields: ["bundleId": bundle])
-        guard response["ok"] as? Bool == true else {
-            // The spike has no precise execution-phase facts. Conservatively classify this as unknown.
-            throw TransportError(description: response["error"] as? String ?? "Runner rejected open", possiblySent: true)
+        return try ActionReply.decode(response)
+    }
+
+    func perform(_ action: DeviceAction, target: ObservedTarget) throws -> [String: Any] {
+        var fields = action.fields
+        fields["target"] = ["scope": target.context["scope"] ?? NSNull(),
+            "bundleId": target.context["targetBundleId"] ?? NSNull(), "path": target.path]
+        guard try jsonData(fields).count <= 60_000 else {
+            throw SomaError("target_too_large", "Target attributes exceed the Runner request budget")
         }
-        return response["result"] as? [String: Any] ?? [:]
+        return try ActionReply.decode(request("act", fields: fields))
     }
 
     func observe() throws -> CapturedObservation {

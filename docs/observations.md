@@ -1,6 +1,6 @@
 # 宿主观察与引用验收
 
-2026-09-05 已实现 `observe`、`inspect`、确定性 AX 精简和会话内缓存。18 项本地测试及一次原生 CoreDevice 真机会话通过。下一阶段接通按引用点击、滑动和输入，以及执行前的设备目标校验；本阶段没有提供这些动作命令。
+2026-09-05 已实现 `observe`、`inspect`、确定性 AX 精简和会话内缓存。本记录保留第 3 阶段的 18 项本地测试及一次原生 CoreDevice 真机证据；同日第 4 阶段已接通按引用点击、滑动、输入与实时目标校验，新增证据见 [动作验收](actions.md)。
 
 ## 当前调用
 
@@ -24,7 +24,7 @@ agentsoma --session "$SESSION" inspect o2 --offset 20
 [e24] key "All Clear"
 ```
 
-显示为 `[e24]` 的节点，其完整引用是该会话的 `o4:e24`。引用只标识已采集的来源节点，不能据此认定设备目标唯一、可点击或仍在原位置。`refs=current` 只表示它尚未被宿主失效；动作接入后仍须通过实时目标校验。
+显示为 `[e24]` 的节点，其完整引用是该会话的 `o4:e24`。引用只标识已采集的来源节点，不能据此认定设备目标唯一、可点击或仍在原位置。`refs=current` 只表示它尚未被宿主失效；当前动作执行前还会校验实时目标。
 
 ## 本阶段收敛的实现值
 
@@ -41,15 +41,15 @@ agentsoma --session "$SESSION" inspect o2 --offset 20
 
 ## 引用与生命周期
 
-所有操作在宿主工作队列串行执行。`open` 调用后端前先标记当前引用为 pending；正常完成或结果 unknown 后失效。明确未发送的错误恢复此前仍有效的引用，参数检查失败不改变引用。unknown 不重发。
+所有操作在宿主工作队列串行执行。`open` 和通过本地引用解析的设备动作调用后端前先标记当前引用为 pending；正常完成或结果 unknown 后失效。明确未发送且没有其他失效原因的错误恢复此前仍有效的引用，参数检查失败不改变引用；发现目标变化时仍须失效。unknown 不重发。
 
-开始一次新观察会使旧引用失效，即使新采集失败也要求重新 observe；成功后仅最新观察拥有 current 引用。旧快照只要仍在缓存就可 inspect，但不会恢复操作资格。已淘汰的快照返回 `observation_unavailable`；未采集的节点返回 `node_not_captured`；旧 session 无法再 inspect。内部 `resolveCurrent` 已验证这些状态，真实点击等命令尚未接入它。
+开始一次新观察会使旧引用失效，即使新采集失败也要求重新 observe；成功后仅最新观察拥有 current 引用。旧快照只要仍在缓存就可 inspect，但不会恢复操作资格。已淘汰的快照返回 `observation_unavailable`；未采集的节点返回 `node_not_captured`；旧 session 无法再 inspect。当前动作已使用这些状态，并从原快照构造设备校验所需的目标描述。
 
 成功的 observe / inspect 完成后续期，失败的 inspect 不续期，status 保持不续期。已接收的操作和关闭仍沿用原有串行化与空闲规则。
 
 ## 采集事实与限制
 
-薄 Runner 新增的内容限于采集事实：检查 SpringBoard 是否有唯一 Alert；否则采集已经 open 且确认 runningForeground 的目标 App；前台不能确认时返回截图，AX 标记 unavailable、foreground 标记 null。唯一系统 Alert 的结构属于 SpringBoard，不能把目标 App 当成该系统界面的前台身份。没有独立发现任意前台 App 的能力，也没有自动选择允许/拒绝权限的动作。
+薄 Runner 检查 SpringBoard 是否有唯一 Alert；否则采集已经 open 且确认 runningForeground 的目标 App；前台不能确认时返回截图，AX 标记 unavailable、foreground 标记 null。第 4 阶段增加 App 内唯一 Alert 的独立 `appAlert` 范围。唯一系统 Alert 的结构属于 SpringBoard，不能把目标 App 当成该系统界面的前台身份。没有独立发现任意前台 App 的能力，也没有自动选择允许/拒绝权限的动作。
 
 AX 开始/结束时间与截图后的时间分别返回；屏幕点坐标框来自采集 App 的 frame，未知时返回 null，PNG 像素尺寸由 Mac 解码图像验证。截图与 AX **不是原子快照，也不保证界面已稳定**。
 

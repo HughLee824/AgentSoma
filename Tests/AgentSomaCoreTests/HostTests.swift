@@ -13,6 +13,11 @@ private final class ControlledBackend: SessionBackend {
     private(set) var openCount = 0
     private(set) var stopCount = 0
     private(set) var observeCount = 0
+    private(set) var actionCount = 0
+    var actionFailure: ActionFailure?
+    var blockAction = false
+    let actionStarted = DispatchSemaphore(value: 0)
+    let releaseAction = DispatchSemaphore(value: 0)
 
     func start() throws -> [String: Any] { ["runnerSession": "controlled-runner", "runnerPid": 123] }
     func status() throws -> [String: Any] { try start() }
@@ -32,6 +37,13 @@ private final class ControlledBackend: SessionBackend {
     func observe() throws -> CapturedObservation {
         observeCount += 1
         return try observationFixture()
+    }
+    func perform(_ action: DeviceAction, target: ObservedTarget) throws -> [String: Any] {
+        actionCount += 1
+        actionStarted.signal()
+        if blockAction { _ = releaseAction.wait(timeout: .now() + 5) }
+        if let actionFailure { throw actionFailure }
+        return ["kind": action.kind]
     }
 }
 
@@ -217,6 +229,60 @@ final class HostTests: XCTestCase {
         let renewed = try call(paths, session: session, op: "status")["idleRemainingSeconds"] as! Double
         XCTAssertGreaterThan(renewed, afterInvalid + 0.08)
         XCTAssertEqual(backend.observeCount, 1)
+        _ = try call(paths, session: session, op: "disconnect")
+        wait(for: [finished], timeout: 3)
+    }
+
+    func testActionFactsPreserveRejectedReferencesAndInvalidateChangedOrUnknownTargets() throws {
+        let backend = ControlledBackend()
+        let (paths, session, finished) = try host(timeout: 5, backend: backend)
+        for (index, failure) in [
+            ActionFailure(code: "ambiguous_target", description: "Ambiguous", possiblyExecuted: false, requiresObservation: false),
+            ActionFailure(code: "target_changed", description: "Changed", possiblyExecuted: false, requiresObservation: true),
+            ActionFailure(code: "lost_result", description: "Unknown", possiblyExecuted: true, requiresObservation: true)
+        ].enumerated() {
+            _ = try call(paths, session: session, op: "observe")
+            backend.actionFailure = failure
+            let reference = "o\(index + 1):e11"
+            let result = try call(paths, session: session, op: "tap", fields: ["reference": reference])
+            XCTAssertEqual(result["outcome"] as? String, failure.possiblyExecuted ? "unknown" : "not_dispatched")
+            let detail = try call(paths, session: session, op: "inspect", fields: ["reference": reference, "offset": 0])
+            XCTAssertEqual((detail["result"] as? [String: Any])?["refs"] as? String,
+                           index == 0 ? "current" : (index == 1 ? "target_changed" : "invalidated"))
+        }
+        XCTAssertEqual(backend.actionCount, 3)
+        let stale = try call(paths, session: session, op: "tap", fields: ["reference": "o3:e11"])
+        XCTAssertEqual(stale["outcome"] as? String, "not_dispatched")
+        XCTAssertEqual(backend.actionCount, 3)
+        _ = try call(paths, session: session, op: "disconnect")
+        wait(for: [finished], timeout: 3)
+    }
+
+    func testQueuedActionsCannotReuseAReferenceAfterTheFirstAction() throws {
+        let backend = ControlledBackend()
+        backend.blockAction = true
+        let (paths, session, finished) = try host(timeout: 5, backend: backend)
+        _ = try call(paths, session: session, op: "observe")
+        let first = expectation(description: "first action")
+        let second = expectation(description: "second action rejected")
+        DispatchQueue.global().async {
+            do {
+                let result = try self.call(paths, session: session, op: "tap", fields: ["reference": "o1:e11"])
+                XCTAssertEqual(result["outcome"] as? String, "completed")
+            } catch { XCTFail("\(error)") }
+            first.fulfill()
+        }
+        XCTAssertEqual(backend.actionStarted.wait(timeout: .now() + 2), .success)
+        DispatchQueue.global().async {
+            do {
+                let result = try self.call(paths, session: session, op: "tap", fields: ["reference": "o1:e11"])
+                XCTAssertEqual(result["outcome"] as? String, "not_dispatched")
+            } catch { XCTFail("\(error)") }
+            second.fulfill()
+        }
+        backend.releaseAction.signal()
+        wait(for: [first, second], timeout: 3)
+        XCTAssertEqual(backend.actionCount, 1)
         _ = try call(paths, session: session, op: "disconnect")
         wait(for: [finished], timeout: 3)
     }

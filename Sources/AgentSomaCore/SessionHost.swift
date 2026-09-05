@@ -80,7 +80,7 @@ final class SessionHost {
                    "outcome": "not_dispatched", "error": ["code": code, "message": message]], {})
         }
         guard request["version"] as? Int == 1, request["session"] as? String == config.session,
-              !id.isEmpty, ["status", "open", "observe", "inspect", "disconnect"].contains(operation) else {
+              !id.isEmpty, (["status", "open", "observe", "inspect", "disconnect"] + DeviceAction.operations).contains(operation) else {
             reject("invalid_request", "Invalid session request")
             return
         }
@@ -91,6 +91,11 @@ final class SessionHost {
             }
         }
         var reference: ObservationReference?
+        var action: DeviceAction?
+        if DeviceAction.operations.contains(operation) {
+            do { action = try DeviceAction(operation: operation, request: request) }
+            catch { reject((error as? SomaError)?.code ?? "invalid_action", String(describing: error)); return }
+        }
         if operation == "inspect" {
             do {
                 reference = try ObservationReference(request["reference"] as? String ?? "")
@@ -130,17 +135,27 @@ final class SessionHost {
                 case "inspect":
                     response["result"] = try observations.inspect(reference!, offset: request["offset"] as! Int)
                     effective = true
+                case "tap", "swipe", "type":
+                    let target = try observations.resolveTarget(for: action!)
+                    previousObservation = observations.beginAction()
+                    effective = true
+                    response["result"] = try backend.perform(action!, target: target)
+                    observations.finishAction(previous: previousObservation, dispatched: true)
+                    response["outcome"] = "completed"
                 default: break
                 }
             } catch {
                 response["ok"] = false
-                let uncertain = (error as? TransportError)?.possiblySent ?? false
-                if operation == "open" {
+                let failure = error as? ActionFailure
+                let uncertain = failure?.possiblyExecuted ?? (error as? TransportError)?.possiblySent ?? false
+                if operation == "open" || action != nil {
                     observations.finishAction(previous: previousObservation, dispatched: uncertain)
+                    if failure?.requiresObservation == true { observations.invalidate("target_changed") }
                     response["outcome"] = uncertain ? "unknown" : "not_dispatched"
+                    response["requiresObservation"] = uncertain || failure?.requiresObservation == true || (error as? SomaError)?.code == "stale_reference"
                 }
                 if operation == "status" { observations.invalidate("backend_unavailable") }
-                response["error"] = ["code": (error as? SomaError)?.code ?? "backend_error", "message": String(describing: error)]
+                response["error"] = ["code": failure?.code ?? (error as? SomaError)?.code ?? "backend_error", "message": String(describing: error)]
             }
             // The control queue serializes command admission against expiry and completion.
             control.sync {

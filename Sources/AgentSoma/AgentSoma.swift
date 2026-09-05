@@ -15,7 +15,7 @@ struct SessionOptions: ParsableArguments {
 struct AgentSoma: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "agentsoma", abstract: "Eyes and hands for agents operating a real iPhone.",
-        subcommands: [Connect.self, Status.self, Open.self, Observe.self, Inspect.self, Disconnect.self, Host.self])
+        subcommands: [Connect.self, Status.self, Open.self, Observe.self, Inspect.self, Tap.self, Swipe.self, TypeText.self, Disconnect.self, Host.self])
     @OptionGroup var options: SessionOptions
 }
 
@@ -101,4 +101,41 @@ struct Host: ParsableCommand {
     static let configuration = CommandConfiguration(commandName: "_host", shouldDisplay: false)
     @Option var directory: String
     mutating func run() throws { try runHost(directory: URL(fileURLWithPath: directory, isDirectory: true)) }
+}
+
+struct Tap: ParsableCommand {
+    static let configuration = CommandConfiguration(abstract: "Tap a current element, or a point in a current observation.")
+    @OptionGroup var options: SessionOptions
+    @Argument(help: "Element reference; use an observation ID with --x and --y.") var reference: String
+    @Option(help: "Horizontal screen point coordinate.") var x: Double?
+    @Option(help: "Vertical screen point coordinate.") var y: Double?
+    mutating func run() throws {
+        let session = try options.requiredSession()
+        var fields: [String: Any] = ["reference": reference]
+        fields["x"] = x; fields["y"] = y
+        try output { try SessionClient.call(session: session, operation: "tap", fields: fields) }
+    }
+}
+
+struct Swipe: ParsableCommand {
+    static let configuration = CommandConfiguration(abstract: "Swipe within a current element's area.")
+    @OptionGroup var options: SessionOptions
+    @Argument(help: "Current element reference, such as o1:e13.") var reference: String
+    @Option(help: "Finger movement: up, down, left or right.") var direction: String
+    mutating func run() throws {
+        let session = try options.requiredSession()
+        try output { try SessionClient.call(session: session, operation: "swipe", fields: ["reference": reference, "direction": direction]) }
+    }
+}
+
+struct TypeText: ParsableCommand {
+    static let configuration = CommandConfiguration(commandName: "type", abstract: "Insert at the existing caret, or replace a text input's entire contents.")
+    @OptionGroup var options: SessionOptions
+    @Argument(help: "Current text input reference.") var reference: String
+    @Option(help: "insert requires existing keyboard focus; replace focuses and selects all.") var mode: String
+    @Option(help: "Literal text up to 4096 UTF-8 bytes; no control keys or newlines. Empty text clears in replace mode.") var text: String
+    mutating func run() throws {
+        let session = try options.requiredSession()
+        try output { try SessionClient.call(session: session, operation: "type", fields: ["reference": reference, "mode": mode, "text": text]) }
+    }
 }
