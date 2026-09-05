@@ -140,7 +140,7 @@ final class ObservationCache {
         var index = 0
         if !action.coordinate {
             let node = try resolveCurrent(reference)
-            if action.kind == "type", !["text_field", "secure_text_field", "text_view", "search_field"].contains(node.role) {
+            if ["type", "press"].contains(action.kind), !["text_field", "secure_text_field", "text_view", "search_field"].contains(node.role) {
                 throw SomaError("not_text_input", "The reference must identify a text input")
             }
             index = node.index

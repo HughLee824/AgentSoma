@@ -146,7 +146,7 @@ final class SessionHost {
                 case "inspect":
                     response["result"] = try observations.inspect(reference!, offset: request["offset"] as! Int)
                     effective = true
-                case "tap", "swipe", "type":
+                case "tap", "swipe", "type", "press":
                     let target = try observations.resolveTarget(for: action!)
                     previousObservation = observations.beginAction()
                     effective = true

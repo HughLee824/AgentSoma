@@ -1,7 +1,7 @@
 import Foundation
 
 struct DeviceAction {
-    static let operations = ["tap", "swipe", "type"]
+    static let operations = ["tap", "swipe", "type", "press"]
     let kind: String
     let reference: ObservationReference
     let fields: [String: Any]
@@ -32,7 +32,7 @@ struct DeviceAction {
             guard let mode = request["mode"] as? String, ["insert", "replace"].contains(mode) else {
                 throw SomaError("invalid_input_mode", "Choose --mode insert or replace")
             }
-            guard let text = request["text"] as? String, text.utf8.count <= 4096,
+            guard let text = request["text"] as? String, text.utf8.count <= TextInput.maximumBytes,
                   mode == "replace" || !text.isEmpty,
                   text.unicodeScalars.allSatisfy({ scalar in
                       let v = scalar.value
@@ -41,6 +41,10 @@ struct DeviceAction {
                 throw SomaError("invalid_text", "Use up to 4096 UTF-8 bytes without control keys or newlines; only replace accepts empty text")
             }
             fields["mode"] = mode; fields["text"] = text
+        }
+        if operation == "press" {
+            guard request["key"] as? String == "return" else { throw SomaError("invalid_key", "Use --key return") }
+            fields["key"] = "return"
         }
         self.fields = fields
     }

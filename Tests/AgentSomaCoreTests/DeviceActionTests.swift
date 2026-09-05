@@ -26,6 +26,16 @@ final class DeviceActionTests: XCTestCase {
         XCTAssertThrowsError(try DeviceAction(operation: "swipe", request: ["reference": "o1:e2", "direction": "forward"]))
     }
 
+    func testReturnRequiresAnExplicitKeyAndElement() throws {
+        let action = try DeviceAction(operation: "press", request: ["reference": "o1:e27", "key": "return"])
+        XCTAssertEqual(action.fields["key"] as? String, "return")
+        for request: [String: Any] in [["reference": "o1:e27"], ["reference": "o1:e27", "key": "enter"],
+                                      ["reference": "o1:e27", "key": "\n"], ["reference": "o1", "key": "return"],
+                                      ["reference": "o1", "key": "return", "x": 1, "y": 2]] {
+            XCTAssertThrowsError(try DeviceAction(operation: "press", request: request))
+        }
+    }
+
     func testExecutionFactsDistinguishRejectionUnknownAndMalformedSuccess() throws {
         let done: [String: Any] = ["ok": true, "execution": ["started": true, "completed": true], "result": ["kind": "tap"]]
         XCTAssertEqual(try ActionReply.decode(done)["kind"] as? String, "tap")
@@ -58,6 +68,10 @@ final class DeviceActionTests: XCTestCase {
         XCTAssertGreaterThan(target.path.count, 3)
         let wrong = try DeviceAction(operation: "type", request: ["reference": "o1:e11", "mode": "insert", "text": "hi"])
         XCTAssertThrowsError(try cache.resolveTarget(for: wrong))
+        let press = try DeviceAction(operation: "press", request: ["reference": "o1:e27", "key": "return"])
+        XCTAssertNoThrow(try cache.resolveTarget(for: press))
+        let wrongPress = try DeviceAction(operation: "press", request: ["reference": "o1:e11", "key": "return"])
+        XCTAssertThrowsError(try cache.resolveTarget(for: wrongPress))
         _ = try cache.store(fixture)
         XCTAssertThrowsError(try cache.resolveTarget(for: action))
     }

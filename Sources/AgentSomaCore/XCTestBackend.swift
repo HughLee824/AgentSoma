@@ -73,8 +73,8 @@ final class XCTestBackend: SessionBackend {
             if let response = try? request("ping", timeout: 1), response["ok"] as? Bool == true,
                let result = response["result"] as? [String: Any] {
                 guard result["lifecycleOwner"] as? String == "host", result["observationVersion"] as? Int == 1,
-                      result["actionVersion"] as? Int == 1, result["launchVersion"] as? Int == 1 else {
-                    throw SomaError("runner_needs_rebuild", "Rebuild the Runner with current observation, action and app-launch support")
+                      result["actionVersion"] as? Int == 2, result["launchVersion"] as? Int == 1 else {
+                    throw SomaError("runner_needs_rebuild", "Run build-runner for current action support, including press --key return, then connect with its new .xctestrun")
                 }
                 identity = response["sessionId"] as? String
                 runnerPID = response["runnerPid"] as? Int

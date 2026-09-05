@@ -292,6 +292,31 @@ final class HostTests: XCTestCase {
         wait(for: [finished], timeout: 3)
     }
 
+    func testReturnRejectsInvalidTargetsAndInvalidatesWithoutReplay() throws {
+        let backend = ControlledBackend()
+        let (paths, session, finished) = try host(timeout: 5, backend: backend)
+        _ = try call(paths, session: session, op: "observe")
+        for fields in [["reference": "o1:e27", "key": "enter"], ["reference": "o1:e11", "key": "return"]] {
+            XCTAssertEqual(try call(paths, session: session, op: "press", fields: fields)["outcome"] as? String, "not_dispatched")
+        }
+        XCTAssertEqual(backend.actionCount, 0)
+        let detail = try call(paths, session: session, op: "inspect", fields: ["reference": "o1", "offset": 0])
+        XCTAssertEqual((detail["result"] as? [String: Any])?["refs"] as? String, "current")
+        let fields = ["reference": "o1:e27", "key": "return"]
+        XCTAssertEqual(try call(paths, session: session, op: "press", fields: fields)["outcome"] as? String, "completed")
+        XCTAssertEqual(try call(paths, session: session, op: "press", fields: fields)["outcome"] as? String, "not_dispatched")
+        XCTAssertEqual(backend.actionCount, 1)
+        _ = try call(paths, session: session, op: "observe")
+        backend.actionFailure = ActionFailure(code: "lost_result", description: "Unknown", possiblyExecuted: true, requiresObservation: true)
+        XCTAssertEqual(try call(paths, session: session, op: "press", fields: ["reference": "o2:e27", "key": "return"])["outcome"] as? String, "unknown")
+        let afterUnknown = try call(paths, session: session, op: "inspect", fields: ["reference": "o2", "offset": 0])
+        XCTAssertEqual((afterUnknown["result"] as? [String: Any])?["refs"] as? String, "invalidated")
+        _ = try call(paths, session: session, op: "status")
+        XCTAssertEqual(backend.actionCount, 2)
+        _ = try call(paths, session: session, op: "disconnect")
+        wait(for: [finished], timeout: 3)
+    }
+
     func testQueuedActionsCannotReuseAReferenceAfterTheFirstAction() throws {
         let backend = ControlledBackend()
         backend.blockAction = true

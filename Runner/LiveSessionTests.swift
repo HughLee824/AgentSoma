@@ -162,7 +162,7 @@ final class LiveSessionTests: XCTestCase {
         if op == "ping" {
             let hostManaged = ProcessInfo.processInfo.environment["AGENTSOMA_HOST_MANAGED"] == "1"
             return ["protocol": "agentsoma-spike-jsonl-v1", "lifecycleOwner": hostManaged ? "host" : "spike",
-                    "lifetimeLimitSeconds": hostManaged ? NSNull() : 900, "observationVersion": 1, "actionVersion": 1, "launchVersion": 1]
+                    "lifetimeLimitSeconds": hostManaged ? NSNull() : 900, "observationVersion": 1, "actionVersion": 2, "launchVersion": 1]
         }
         if op == "shutdown" { return ["stopped": true] }
         if op == "launch" {
@@ -212,7 +212,7 @@ final class LiveSessionTests: XCTestCase {
 
     @MainActor
     private func perform(_ command: [String: Any]) throws -> [String: Any] {
-        guard let kind = command["kind"] as? String, ["tap", "swipe", "type"].contains(kind),
+        guard let kind = command["kind"] as? String, ["tap", "swipe", "type", "press"].contains(kind),
               let expected = command["target"] as? [String: Any],
               let scope = expected["scope"] as? String,
               let path = expected["path"] as? [[String: Any]], !path.isEmpty, path.count <= 200 else {
@@ -221,6 +221,7 @@ final class LiveSessionTests: XCTestCase {
         let direction = command["direction"] as? String
         let mode = command["mode"] as? String
         let text = command["text"] as? String
+        if kind == "press", command["key"] as? String != "return" { throw CommandError("invalid_key") }
         if kind == "swipe", !["up", "down", "left", "right"].contains(direction ?? "") { throw CommandError("invalid_direction") }
         if kind == "type" {
             guard ["insert", "replace"].contains(mode ?? ""), let text, text.utf8.count <= 4096,
@@ -277,6 +278,9 @@ final class LiveSessionTests: XCTestCase {
         guard matches(try target.snapshot(), expected: path.last!) else { throw CommandError("target_changed", requiresObservation: true) }
         guard target.isEnabled else { throw CommandError("target_disabled") }
         guard target.isHittable else { throw CommandError("target_not_hittable") }
+        if ["type", "press"].contains(kind), ![XCUIElement.ElementType.textField, .secureTextField, .textView, .searchField].contains(target.elementType) {
+            throw CommandError("not_text_input")
+        }
         switch kind {
         case "tap": try event { target.tap() }
         case "swipe":
@@ -289,15 +293,15 @@ final class LiveSessionTests: XCTestCase {
                 }
             }
         case "type":
-            guard [XCUIElement.ElementType.textField, .secureTextField, .textView, .searchField].contains(target.elementType) else {
-                throw CommandError("not_text_input")
-            }
             if mode == "replace" {
                 try event { target.tap() }
                 try event { target.typeKey("a", modifierFlags: .command) }
                 if text?.isEmpty == true { try event { target.typeText(XCUIKeyboardKey.delete.rawValue) } }
             }
             if let text, !text.isEmpty { try event { target.typeText(text) } }
+        case "press":
+            try event { target.typeText(XCUIKeyboardKey.return.rawValue) }
+            return ["kind": kind, "key": "return"]
         default: break
         }
         return ["kind": kind]

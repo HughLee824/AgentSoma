@@ -15,7 +15,7 @@ struct SessionOptions: ParsableArguments {
 struct AgentSoma: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "agentsoma", abstract: "Eyes and hands for agents operating a real iPhone.",
-        subcommands: [BuildRunner.self, Devices.self, Connect.self, Status.self, Apps.self, Open.self, Observe.self, Inspect.self, Tap.self, Swipe.self, TypeText.self, Disconnect.self, Host.self])
+        subcommands: [BuildRunner.self, Devices.self, Connect.self, Status.self, Apps.self, Open.self, Observe.self, Inspect.self, Tap.self, Swipe.self, TypeText.self, Press.self, Disconnect.self, Host.self])
     @OptionGroup var options: SessionOptions
 }
 
@@ -166,9 +166,34 @@ struct TypeText: ParsableCommand {
     @OptionGroup var options: SessionOptions
     @Argument(help: "Current text input reference.") var reference: String
     @Option(help: "insert requires existing keyboard focus; replace focuses and selects all.") var mode: String
-    @Option(help: "Literal text up to 4096 UTF-8 bytes; no control keys or newlines. Empty text clears in replace mode.") var text: String
+    @Option(help: "Literal text up to 4096 UTF-8 bytes; no control keys or newlines. Empty text clears in replace mode.") var text: String?
+    @Flag(help: "Read UTF-8 text from stdin until EOF, up to 4096 bytes. No trimming; use instead of --text.") var stdin = false
+
+    mutating func validate() throws {
+        guard (text != nil) != stdin else { throw ValidationError("Choose exactly one of --text or --stdin") }
+    }
+
     mutating func run() throws {
         let session = try options.requiredSession()
-        try output { try SessionClient.call(session: session, operation: "type", fields: ["reference": reference, "mode": mode, "text": text]) }
+        try output {
+            let value: String
+            do { value = try stdin ? TextInput.read(from: .standardInput) : text! }
+            catch {
+                return ["ok": false, "outcome": "not_dispatched",
+                        "error": ["code": (error as? SomaError)?.code ?? "stdin_read_failed", "message": String(describing: error)]]
+            }
+            return try SessionClient.call(session: session, operation: "type", fields: ["reference": reference, "mode": mode, "text": value])
+        }
+    }
+}
+
+struct Press: ParsableCommand {
+    static let configuration = CommandConfiguration(abstract: "Send an explicit Return to a text input with existing keyboard focus.")
+    @OptionGroup var options: SessionOptions
+    @Argument(help: "Current text input reference; this command does not tap to focus.") var reference: String
+    @Option(help: "Key to send; currently only return is supported.") var key: String
+    mutating func run() throws {
+        let session = try options.requiredSession()
+        try output { try SessionClient.call(session: session, operation: "press", fields: ["reference": reference, "key": key]) }
     }
 }
