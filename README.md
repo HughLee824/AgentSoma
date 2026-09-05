@@ -45,11 +45,11 @@ Runner 使用仓库内的[独立 Xcode 工程](Runner/AgentSomaRunner.xcodeproj/
 
 `build-runner` 使用当前选中的 Xcode 构建并验证签名，返回实际 SDK 对应的 `.xctestrun` 路径。每次构建使用独立目录，已有构建可供后续会话复用。`connect` 通过 Xcode 安装并启动该 Runner，在宿主和 Runner 均可响应后返回，agent 不需要单独启动后台服务。每条 CLI 命令结束后，宿主继续持有原 XCTest 会话。会话结束后，宿主释放自己的 xcodebuild/Runner 资源并退出。
 
-当前提供 `build-runner`、`devices`、`connect`、`status`、`apps`、`open`、`observe`、`inspect`、`tap`、`swipe`、`type`、`disconnect`。`devices` 返回 CoreDevice 已知设备和原生连接状态，connect 检查是否能建立会话；`apps` 查询已安装 App 的名称和 bundle ID，支持 `--query` 筛选，每页最多 50 项，按返回的 `nextOffset` 继续读取。见 [发现接口与完整调用验收](docs/discovery.md)。
+当前提供 `build-runner`、`devices`、`connect`、`status`、`apps`、`open`、`observe`、`inspect`、`tap`、`swipe`、`type`、`press`、`disconnect`。`devices` 返回 CoreDevice 已知设备和原生连接状态，connect 检查是否能建立会话；`apps` 查询已安装 App 的名称和 bundle ID，支持 `--query` 筛选，每页最多 50 项，按返回的 `nextOffset` 继续读取。见 [发现接口与完整调用验收](docs/discovery.md)。
 
 `open` 已移除临时 App 白名单；宿主先检查安装状态，再由 Runner 激活已运行的 App，未运行时启动。未安装的 App 在派发前拒绝。`observe` 返回截图路径及紧凑 AX 文本，`inspect` 展开同一缓存快照；动作在设备端确认目标后执行。见 [观察契约](docs/observations.md) 和 [动作接口与验收](docs/actions.md)。
 
-`type oN:eN --mode insert --text ...` 保留现有光标，需要输入框已有键盘焦点；需要聚焦时先 tap、再 observe。`--mode replace` 聚焦并替换全部内容，空字符串表示清空，两种模式都不自动提交。`swipe oN:eN --direction up` 的方向表示手指移动方向；坐标点击使用 `tap oN --x X --y Y`，单位为屏幕点。
+`type oN:eN --mode insert --text ...` 保留现有光标，需要输入框已有键盘焦点；需要聚焦时先 tap、再 observe。`--mode replace` 聚焦并替换全部内容，空字符串表示清空，两种模式都不自动提交。文本源也可选 `--stdin < text.txt`，与 `--text` 互斥，按原文读取 UTF-8 至 EOF；仍限制 4096 字节并拒绝末尾换行。`press oN:eN --key return` 使用已有焦点发送独立 Return，完成后重新 observe 核对效果。`swipe oN:eN --direction up` 的方向表示手指移动方向；坐标点击使用 `tap oN --x X --y Y`，单位为屏幕点。
 
 ## 生命周期与输出
 
@@ -58,7 +58,7 @@ Runner 使用仓库内的[独立 Xcode 工程](Runner/AgentSomaRunner.xcodeproj/
 - 已接收、排队或执行中的命令不被空闲回收；`disconnect` 等待已经接收的命令结束，再清理会话。
 - `status` 检查 Runner 并返回剩余空闲时间，不续期。当前没有额外内部保活轮询。
 - observe / inspect 成功时输出多行文本，其余结果与运行错误为单行 JSON。成功退出码为 0，运行失败为 1；参数语法错误由 ArgumentParser 输出到 stderr 并非零退出。
-- `open`、`tap`、`swipe`、`type` 返回 `completed`、`not_dispatched` 或 `unknown`。Runner 在进入可发送输入的 API 前记录执行阶段，宿主据此区分执行前拒绝与可能已产生影响；缺失事实、连接中断或丢失响应按保守结果处理，不自动重发。
+- `open`、`tap`、`swipe`、`type`、`press` 返回 `completed`、`not_dispatched` 或 `unknown`。Runner 在进入可发送输入的 API 前记录执行阶段，宿主据此区分执行前拒绝与可能已产生影响；缺失事实、连接中断或丢失响应按保守结果处理，不自动重发。
 
 状态目录默认为 `/private/tmp/agentsoma-<uid>`，目录权限 0700；可通过 `AGENTSOMA_STATE_DIR` 设置较短的替代路径。每个会话包含本地 Unix socket、启动配置和诊断文件。设备 token 只保存在宿主内存及 XCTest 子进程环境，不写入配置文件或 CLI 输出。相同状态目录内对设备规范 UDID 使用系统文件锁，拒绝重复占用；锁文件保留，锁本身随持有进程退出而释放。
 

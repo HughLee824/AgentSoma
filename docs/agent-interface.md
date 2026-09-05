@@ -1,6 +1,6 @@
 # AgentSoma 最小 agent 接口草案
 
-状态：需求与接口记录。2026-09-05 已实现 build-runner、devices、connect、status、apps、open、observe、inspect、tap、swipe、type、disconnect 及会话宿主；生命周期、观察、缓存、引用失效、目标校验、动作结果和完整 agent 调用均经过本地与真机验证。已移除临时 App 白名单，build-runner 已可构建并验证独立 Runner，为 connect 返回签名产物路径，见 [首次接入](onboarding.md)。发现与分页见 [发现契约](discovery.md)；当前观察与动作契约见 [观察验收](observations.md)、[动作验收](actions.md) 和 [使用说明](../README.md)。下文逻辑能力与历史 JSON 示例仍用于解释语义，不代替实际 CLI 参数。
+状态：需求与接口记录。2026-09-05 已实现 build-runner、devices、connect、status、apps、open、observe、inspect、tap、swipe、type、press、disconnect 及会话宿主；生命周期、观察、缓存、引用失效、目标校验、动作结果和完整 agent 调用均经过本地与真机验证。已移除临时 App 白名单，build-runner 已可构建并验证独立 Runner，为 connect 返回签名产物路径，见 [首次接入](onboarding.md)。发现与分页见 [发现契约](discovery.md)；当前观察与动作契约见 [观察验收](observations.md)、[动作验收](actions.md) 和 [使用说明](../README.md)。下文逻辑能力与历史 JSON 示例仍用于解释语义，不代替实际 CLI 参数。
 
 已确认的职责是：用户用自然语言提出任务，外部 agent 调用设备操作，AgentSoma 返回观察或执行结果。测试只是调用场景之一。MVP 接受首次在 Xcode 配置签名。当前讨论的 CLI 面向 agent；日常不要求人手工敲命令，并不排除 agent 执行 CLI。
 
@@ -49,10 +49,11 @@
 | `tap` | 点击一个点，或一个明确的元素目标。 |
 | `swipe` | 在指定元素区域按明确方向滑动。 |
 | `type_text` | 向指定输入目标执行明确的插入或替换；不自动发送提交动作。 |
+| `press` | 向有键盘焦点的输入框发送独立按键；当前仅支持 Return。 |
 
-已确认文本输入具有两种语义：`insert` 在输入框当前光标位置输入文本；`replace` 将整个输入框内容替换为指定文本。输入后不会自动附加回车或点击提交按钮，回车或点击“搜索”等提交操作由 agent 单独发出动作。回车动作的具体接口尚未确定。
+已确认文本输入具有两种语义：`insert` 在输入框当前光标位置输入文本；`replace` 将整个输入框内容替换为指定文本。输入后不会自动附加回车或点击提交按钮，回车或点击“搜索”等提交操作由 agent 单独发出动作。回车接口现为 `press oN:eN --key return`。
 
-当前 insert 直接使用已有键盘焦点，不点击而改变光标位置；需要聚焦时由 agent 先 tap、再 observe。replace 聚焦、全选，再覆盖选区或清空。文本当前限制为 4096 UTF-8 字节，拒绝换行/控制键；独立 Return、长文本/stdin 尚未实现。这些是本阶段的工程边界，原语证据与限制见 [动作契约](actions.md)。
+当前 insert 直接使用已有键盘焦点，不点击而改变光标位置；需要聚焦时由 agent 先 tap、再 observe。replace 聚焦、全选，再覆盖选区或清空。文本当前限制为 4096 UTF-8 字节，拒绝换行/控制键；`--text` 或 `--stdin` 二选一，stdin 原样读取 UTF-8 到 EOF，末尾换行也拒绝。独立 Return 通过 `press oN:eN --key return` 发送，要求已有焦点，执行后再 observe 核对 App 效果。这些是本阶段的工程边界，原语证据与限制见 [动作契约](actions.md)。
 
 CLI 已确认由 agent 显式填写 `--mode`。以下 JSON 仅描述动作语义，不是 CLI 要求提交的参数对象；内部字段组织仍是草案：
 
@@ -96,7 +97,7 @@ CLI 已确认由 agent 显式填写 `--mode`。以下 JSON 仅描述动作语义
 
 ## 动作结果的含义
 
-已确认 `act` 使用下列三种执行结果；它们描述设备动作的执行情况，界面结果由 agent 再观察。当前 open/tap/swipe/type 已返回请求 ID、session、ok、outcome 及 result 或 error，具体 JSON 示例见 [动作结果](actions.md#执行结果)。
+已确认 `act` 使用下列三种执行结果；它们描述设备动作的执行情况，界面结果由 agent 再观察。当前 open/tap/swipe/type/press 的会话结果已返回请求 ID、session、ok、outcome 及 result 或 error；stdin 在 CLI 读取失败时尚未创建请求，返回 not_dispatched 与 error，具体 JSON 示例见 [动作结果](actions.md#执行结果)。
 
 | `outcome` | 含义 | 例子 |
 | --- | --- | --- |
@@ -124,9 +125,9 @@ MCP 的原生图像结果、工具发现和结构化参数仍是可比较的优�
 
 ## CLI 调用形式提案
 
-用户已接受以 `agentsoma` 的直接动词子命令和显式 `--session` 组织调用，以及下方 `inspect`、`type --mode/--text` 和 `--idle-timeout` 的形式。完整协议仍未实现；尖括号内容需要替换，`s1`、`o4:e2` 等是假定返回的会话和观察引用，不代表已确定 ID 生成规则或本轮设备结果。
+用户已接受以 `agentsoma` 的直接动词子命令和显式 `--session` 组织调用，以及下方 `inspect`、`type --mode/--text` 和 `--idle-timeout` 的形式。以下示例中的尖括号内容需要替换，`s1`、`o4:e2` 等是假定返回的会话和观察引用，不代表本轮设备实际返回值。
 
-七项逻辑能力已映射成直接的 CLI 子命令：设备发现为 `devices`，App 发现为 `apps`，其余调用为 `connect`、`open`、`observe`、`tap`、`type`、`inspect`、`swipe` 与 `disconnect`。会话参数统一用 `--session`，在命令中显式选择会话。apps 可用 `--query` 对名称/bundle ID 做子串筛选，以 `--offset` 翻页，每页最多 50 项；查询不改变观察引用。
+七项逻辑能力已映射成直接的 CLI 子命令：设备发现为 `devices`，App 发现为 `apps`，其余调用为 `connect`、`open`、`observe`、`tap`、`type`、`press`、`inspect`、`swipe` 与 `disconnect`。会话参数统一用 `--session`，在命令中显式选择会话。apps 可用 `--query` 对名称/bundle ID 做子串筛选，以 `--offset` 翻页，每页最多 50 项；查询不改变观察引用。
 
 ```sh
 agentsoma build-runner --source-root <agentsoma-checkout> --team <team-id> # 返回实际 xctestrun 路径
@@ -141,15 +142,17 @@ agentsoma --session s1 observe               # 点击后重新观察，获得新
 agentsoma --session s1 disconnect
 ```
 
-已接受的配套入口如下，均沿用已有能力而非增加任务层功能：
+当前配套入口如下，沿用已接受的能力语义；具体参数见当前实现说明：
 
 | 命令示意 | 语义 |
 | --- | --- |
 | `agentsoma --session s1 inspect o4:e2` | 按需查看 o4 中这个节点的详细属性及相关已采集结构；不刷新设备或恢复失效引用。 |
 | `agentsoma --session s1 type o5:e5 --mode replace --text '北京'` | 使用新观察中的字段引用执行整段替换；`--mode insert` 表示在当前光标处插入。两者都不自动提交。 |
+| `agentsoma --session s1 type o6:e5 --mode replace --stdin < text.txt` | 从 UTF-8 文件读取原文，仍限 4096 字节且拒绝换行/控制键；需替换为实际文件路径。 |
+| `agentsoma --session s1 press o7:e5 --key return` | 使用已有焦点发送独立 Return，随后 observe 核对 App 效果。 |
 | `agentsoma connect --device <device-id> --idle-timeout 60m` | 为建立的会话调整空闲回收时长；未指定时采用已确认的 30 分钟默认值。 |
 
-`observe` 的默认输出继续采用紧凑文本和图片文件路径；动作输出保留请求关联与 completed / not_dispatched / unknown 语义。截图进入视觉上下文需要 agent 读取图片。坐标现使用 `tap oN --x X --y Y`（屏幕点），滑动使用 `swipe oN:eN --direction up|down|left|right`；长文本/stdin 尚未展开，具体调用见 [动作接口](actions.md)。
+`observe` 的默认输出继续采用紧凑文本和图片文件路径；动作输出保留请求关联与 completed / not_dispatched / unknown 语义。截图进入视觉上下文需要 agent 读取图片。坐标现使用 `tap oN --x X --y Y`（屏幕点），滑动使用 `swipe oN:eN --direction up|down|left|right`；stdin 沿用文本预算和无自动提交语义，独立按键当前限 Return；具体调用见 [动作接口](actions.md)。
 
 ## 证据与后续实现的区别
 

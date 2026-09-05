@@ -52,6 +52,7 @@ swift build
 | `invalid_team` / `invalid_bundle_id` | 修正签名参数；team 是 10 位开发团队 ID，bundle ID 是点分隔标识。 |
 | `runner_build_failed` | 阅读返回路径中的 `build.log`。若提示缺少开发团队/profile，在 Xcode 完成签名；若选中的是 Command Line Tools，切换到完整 Xcode。构建错误不一概归因于签名。 |
 | `runner_products_invalid` / `runner_signature_invalid` | 检查当前源码、构建日志和产物；重新构建，使用新的输出路径。 |
+| `runner_needs_rebuild` | 当前 CLI 要求含 Return 的 `actionVersion=2`。重新 build-runner，将新的 xctestrun 路径用于 connect；旧的成功构建不自动更新。 |
 | `device_locked` | 解锁手机后重新 connect。 |
 | `runner_start_failed` / `coredevice_unavailable` | 查看返回的会话日志，核对设备信任、Developer Mode、USB 和开发服务状态。构建成功不等于设备侧安装或启动已成功。 |
 

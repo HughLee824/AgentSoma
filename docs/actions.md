@@ -1,6 +1,6 @@
 # 设备动作与引用校验
 
-本阶段提供按引用的点击、滑动、光标插入和整段替换，以及基于当前观察的点坐标点击。用户或调用 agent 负责选择动作并观察结果；AgentSoma 不解释自然语言任务。
+当前提供按引用的点击、滑动、光标插入、整段替换和独立 Return，以及基于当前观察的点坐标点击；文本可从参数或 stdin 读取。用户或调用 agent 负责选择动作并观察结果；AgentSoma 不解释自然语言任务。
 
 ## CLI 形式
 
@@ -12,14 +12,18 @@ agentsoma --session "$SESSION" swipe o5:e18 --direction up
 agentsoma --session "$SESSION" type o6:e8 --mode insert --text '北京'
 agentsoma --session "$SESSION" type o7:e8 --mode replace --text '完整的新内容'
 agentsoma --session "$SESSION" type o8:e8 --mode replace --text ''
-agentsoma --session "$SESSION" tap o9 --x 100 --y 200
+agentsoma --session "$SESSION" type o9:e8 --mode replace --stdin < text.txt
+agentsoma --session "$SESSION" press o10:e8 --key return
+agentsoma --session "$SESSION" tap o11 --x 100 --y 200
 ```
 
 - tap 元素用完整 `oN:eN`。点坐标形式用 `oN --x --y`，单位为屏幕点；不是 PNG 像素，不能同时指定元素引用。点击范围限制在当前已确认的 App 或弹窗内。
 - swipe 的 up/down/left/right 描述手指移动方向，调用 XCTest 的对应手势，当前没有自定义速度或距离参数。
 - insert 直接向指定输入框发送文字，保留已有光标位置，不额外点击字段。它需要现有键盘焦点；需要聚焦时由 agent 先 tap、再 observe。公开 hasFocus 在本设备中不反映键盘焦点，不能据此预检。
 - replace 聚焦输入框后发送 Command-A，非空文本直接覆盖选区；空文本通过 `typeText(XCUIKeyboardKey.delete.rawValue)` 删除选区。没有按 AX value 长度连续退格，也没有自动 Return 或点击提交。
-- 当前文本上限是 4096 UTF-8 字节，拒绝换行及控制键；insert 不接受空字符串，replace 空字符串表示清空。这是本阶段的工程边界，多行文本/stdin 和独立按键接口尚未展开。
+- 文本上限仍是 4096 UTF-8 字节，拒绝换行及控制键；insert 不接受空字符串，replace 空字符串表示清空。
+- `--text` 与 `--stdin` 必须且只能选一个。stdin 读取到 EOF，严格解码 UTF-8，不裁剪首尾空格、不去掉末尾换行、不解释转义或执行文本。可用文件重定向或管道；管道生产者需关闭输出。读取到第 4097 字节就拒绝，不为超长输入继续等待 EOF。`--mode replace --stdin < /dev/null` 表示清空。
+- `press oN:eN --key return` 向当前输入框发送独立 Return，要求已有键盘焦点，不额外 tap。需要聚焦时先 tap、再 observe。当前只接受小写 `return`，未提供其他按键或组合键接口。具体界面效果由 App 决定，可能提交、换行或无业务变化；调用方仍需 observe 核对。
 
 ## 宿主与 Runner 的职责
 
@@ -40,7 +44,7 @@ Runner 没有缓存、短引用、续期计时或任务策略。它只处理当�
 
 ## 执行结果
 
-成功及错误均为单行 JSON，并保留请求 ID 和 session。
+进入会话的动作结果均为单行 JSON，并保留请求 ID 和 session。stdin 的读取、编码或字节上限错误在 CLI 创建请求前返回 `ok=false`、`outcome=not_dispatched` 和 error，此时没有会话请求关联字段。文本源选择等语法错误继续由 ArgumentParser 输出到 stderr 并非零退出。
 
 ```json
 {"id":"example-request","session":"example-session","ok":true,"outcome":"completed","result":{"kind":"tap"}}
@@ -62,7 +66,7 @@ XCTest 的命令错误经 Runner 转成响应；不再把已经返回给调用�
 
 原始输入探针和修正经过见 [输入原语记录](../spikes/ios-xctest/INPUT.md)。最初“全选、Delete、再输入”的探针没有单独断言清空，非空输入覆盖选区掩盖了 `typeKey(.delete)` 在本设备上不删除选区的问题。现已改为文本删除字符，并在固定测试中加入删除后的即时断言。
 
-当前仍使用预构建且签名的 Runner。第 5 阶段已实现设备/App 发现并移除 open 的 Fixture/Calculator 范围限制，补充了 Settings 导航点击证据，见 [完整调用验收](discovery.md)。下方保留第 4 阶段的原始动作验收统计。支持证据来自当前 iOS 26.6 的受控 Fixture，不代表所有输入法、自定义编辑器或 App 已完成验证。执行前检查也不构成与 App 自行变化原子隔离的事务。
+当前使用 build-runner 构建并签名的 Runner。新增 Return 后设备动作协议为 `actionVersion=2`；旧产物连接时返回 `runner_needs_rebuild`，需重新 build-runner 并将新路径用于 connect。第 5 阶段已实现设备/App 发现并移除 open 的 Fixture/Calculator 范围限制，补充了 Settings 导航点击证据，见 [完整调用验收](discovery.md)。下方保留第 4 阶段的原始动作验收统计。支持证据来自当前 iOS 26.6 的受控 Fixture，不代表所有输入法、自定义编辑器或 App 已完成验证。执行前检查也不构成与 App 自行变化原子隔离的事务。
 
 ## 验收结果
 
@@ -79,3 +83,17 @@ XCTest 的命令错误经 Runner 转成响应；不再把已经返回给调用�
 测试 Fixture 增加了光标位置、提交计数和延迟改名控件，均只用于验收。首次 CLI 尝试发现激活已安装的旧 Fixture 不会更新这些控件，因此显式安装了本轮构建；产品 open 仍只按运行状态激活或启动。第二次尝试暴露清空问题，修正后第三次完整流程通过。前两次的部分结果不计为完整验收成功。
 
 完整本地证据（git 忽略）为 `spikes/ios-xctest/evidence/actions-cli-20260905-03/`：commands.json、o1–o17 的文本/截图/原始节点、verification.json（断言、清理、源码 SHA256）、swift-tests.log、两份 XCTest 摘要及 run.xcresult。修正后的固定测试结果另存于 `input-primitives-20260905-02.xcresult`。这些文件是开发验收证据，不构成产品任务历史功能。
+
+## stdin 与 Return 补充验收
+
+2026-09-05，代码提交 `3c18f95`，沿用上述 Mac/Xcode/iPhone 环境及已安装 Fixture，构建并安装新版独立 Runner：
+
+- 38 项 Swift 测试通过，包括严格 UTF-8、空白/空文本、4096 字节边界、超过上限但未 EOF 的管道，以及 Return 的引用、目标类型和 unknown 不重发检查。9 项独立 CLI 检查覆盖文本源互斥、缺失文本源、编码/长度错误、空输入和帮助输出。
+- 20 次真机 CLI 调用、6 次观察，复用 Runner PID 8946 / UUID `A41EFA9A-2F60-4D30-B4F6-0387E23AD912`。六张 PNG 均实际读取，AX 来源均完整。文件重定向替换保留中文、emoji、组合字符、首尾空格及字面量符号；管道输入在已有光标末尾追加 `尾`，原文逐字节核对通过。
+- 带末尾换行的替换、空 insert、未支持的 `enter` 键、非输入框目标和 Return 后复用旧引用共 5 次预期拒绝，均为 not_dispatched。原引用在参数/类型拒绝后仍可用于有效动作；派发后则失效。Runner 日志只有 5 次有效 act，没有收到这些被宿主拒绝的动作。
+- 空 stdin 的 replace 在重新输入前立即观察到清空。此前所有输入的提交计数均为 0；通过 `--text` 输入 `Return check` 后，单独 Return 使计数变为 1、键盘收起，字段仍为 `Return check`，旧引用重复调用没有第二次提交。
+- 持续会话 XCTest 1 通过、0 失败、0 跳过。disconnect 正常结束，host 6954、xcodebuild 6959 和设备 Runner 均确认退出，socket/观察缓存已删除。
+
+Return 使用 `typeText(XCUIKeyboardKey.return.rawValue)`，其中键常量由 [Apple XCTest API](https://developer.apple.com/documentation/xcuiautomation/xcuikeyboardkey/return) 提供；上面的实际提交效果来自本轮真机证据。此轮仅验证原生 Fixture 的 Return，未扩展到 WebView Return、其他编辑器、更多按键或多行/更长文本。无焦点行为仍受前述 XCTest 内部重试限制约束。
+
+本地证据（git 忽略）在 `spikes/ios-xctest/evidence/input-cli-20260905-01/`，包括 commands.json、六份文本/PNG/节点、stdin 输入文件、local-cli.json、verification.json、源码 SHA256、构建/测试日志及 run.xcresult。Python 记录器仅为开发验收保存 CLI 输出，不属于产品运行链路。
