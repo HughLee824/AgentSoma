@@ -1,6 +1,6 @@
 # AgentSoma 最小 agent 接口草案
 
-状态：需求与接口草案，完整协议尚未实现。2026-09-05 已实现 connect、status、open、observe、inspect、tap、swipe、type、disconnect 及会话宿主；生命周期、观察、缓存、引用失效、实时目标校验和动作结果经过本地与真机验证。设备/App 发现仍待开发。当前契约见 [观察验收](observations.md)、[动作验收](actions.md) 和 [使用说明](../README.md)。下文逻辑能力与历史 JSON 示例仍用于解释语义，不代替实际 CLI 参数。
+状态：需求与接口记录。2026-09-05 已实现 devices、connect、status、apps、open、observe、inspect、tap、swipe、type、disconnect 及会话宿主；生命周期、观察、缓存、引用失效、目标校验、动作结果和完整 agent 调用均经过本地与真机验证。已移除临时 App 白名单，仍要求预构建和签名的 --xctestrun。发现与分页见 [发现契约](discovery.md)；当前观察与动作契约见 [观察验收](observations.md)、[动作验收](actions.md) 和 [使用说明](../README.md)。下文逻辑能力与历史 JSON 示例仍用于解释语义，不代替实际 CLI 参数。
 
 已确认的职责是：用户用自然语言提出任务，外部 agent 调用设备操作，AgentSoma 返回观察或执行结果。测试只是调用场景之一。MVP 接受首次在 Xcode 配置签名。当前讨论的 CLI 面向 agent；日常不要求人手工敲命令，并不排除 agent 执行 CLI。
 
@@ -126,11 +126,11 @@ MCP 的原生图像结果、工具发现和结构化参数仍是可比较的优�
 
 用户已接受以 `agentsoma` 的直接动词子命令和显式 `--session` 组织调用，以及下方 `inspect`、`type --mode/--text` 和 `--idle-timeout` 的形式。完整协议仍未实现；尖括号内容需要替换，`s1`、`o4:e2` 等是假定返回的会话和观察引用，不代表已确定 ID 生成规则或本轮设备结果。
 
-七项逻辑能力映射成直接的 CLI 子命令：设备发现建议用 `devices`，App 发现建议用 `apps`；已展示并接受的调用使用 `connect`、`open`、`observe`、`tap`、`type`、`inspect` 与 `disconnect`，滑动命令建议用 `swipe`。会话参数统一用 `--session`，在命令中显式选择会话。
+七项逻辑能力已映射成直接的 CLI 子命令：设备发现为 `devices`，App 发现为 `apps`，其余调用为 `connect`、`open`、`observe`、`tap`、`type`、`inspect`、`swipe` 与 `disconnect`。会话参数统一用 `--session`，在命令中显式选择会话。apps 可用 `--query` 对名称/bundle ID 做子串筛选，以 `--offset` 翻页，每页最多 50 项；查询不改变观察引用。
 
 ```sh
 agentsoma devices
-agentsoma connect --device <device-id>        # 假设返回 session=s1；默认空闲 30 分钟
+agentsoma connect --device <device-id> --xctestrun <signed-runner.xctestrun> # 假设返回 session=s1
 agentsoma --session s1 apps
 agentsoma --session s1 open <bundle-id>
 agentsoma --session s1 observe               # 假设返回 observation=o4 和元素引用
@@ -154,6 +154,6 @@ agentsoma --session s1 disconnect
 
 已有实验验证了 Runner 长驻、动态指令、截图与有界界面结构、点击、双语输入、滑动、跨 App 操作、系统通知权限弹窗，以及丢失响应后的结果核对。详见 [持续会话](../spikes/ios-xctest/LIVE.md) 和 [扩展验证](../spikes/ios-xctest/EXTENDED.md)。
 
-本草案不是对现有 spike API 的直接改名。当前 open 激活运行中的 App；open 和设备动作均根据 Runner 执行阶段提供三态结果，缺失或矛盾的事实保守归为 unknown。观察已整合可确认的已打开 App、唯一 App/SpringBoard Alert 及未知前台时的截图；动作会检查对应上下文与实时目标。设备/App 发现仍待实现，独立的未知前台身份识别尚未解决，应如实暴露限制。
+本草案不是对现有 spike API 的直接改名。当前 open 激活运行中的 App；open 和设备动作均根据 Runner 执行阶段提供三态结果，缺失或矛盾的事实保守归为 unknown。观察已整合可确认的已打开 App、唯一 App/SpringBoard Alert 及未知前台时的截图；动作会检查对应上下文与实时目标。设备/App 发现与安装前置检查已在 Mac 实现；独立的未知前台身份识别尚未解决，应如实暴露限制。
 
-首版 agent 入口为 CLI，最小 Swift 宿主已使用 Foundation 进程管理、Unix 域套接字与 JSON、ArgumentParser 落地；CoreDevice 直连及生命周期已在当前环境验证。自有薄 XCTest Runner 是当前设备后端。宿主观察、引用、动作与目标校验已通过；接下来完成发现入口、移除探针 App 白名单及完整调用验收，见 [v0.1 实现计划](v0.1-plan.md)。
+首版 agent 入口为 CLI，最小 Swift 宿主已使用 Foundation 进程管理、Unix 域套接字与 JSON、ArgumentParser 落地；CoreDevice 直连及生命周期已在当前环境验证。自有薄 XCTest Runner 是当前设备后端。宿主观察、引用、动作、目标校验、发现入口与完整调用验收已通过，探针 App 白名单已移除。自动构建与首次安装引导仍待实现，见 [v0.1 实现计划](v0.1-plan.md)。
