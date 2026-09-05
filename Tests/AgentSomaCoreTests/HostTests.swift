@@ -9,12 +9,15 @@ private final class ControlledBackend: SessionBackend {
     let stopped = DispatchSemaphore(value: 0)
     var blockOpen = false
     var loseOpenResponse = false
+    var rejectOpenBeforeSend = false
     private(set) var openCount = 0
     private(set) var stopCount = 0
+    private(set) var observeCount = 0
 
     func start() throws -> [String: Any] { ["runnerSession": "controlled-runner", "runnerPid": 123] }
     func status() throws -> [String: Any] { try start() }
     func open(bundle: String) throws -> [String: Any] {
+        if rejectOpenBeforeSend { throw TransportError(description: "Not connected", possiblySent: false) }
         openCount += 1
         opened.signal()
         if blockOpen { _ = releaseOpen.wait(timeout: .now() + 5) }
@@ -25,6 +28,10 @@ private final class ControlledBackend: SessionBackend {
         stopCount += 1
         stopped.signal()
         return ["shutdownAcknowledged": true, "xcodebuildExited": true, "xcodebuildExitCode": 0, "forced": false]
+    }
+    func observe() throws -> CapturedObservation {
+        observeCount += 1
+        return try observationFixture()
     }
 }
 
@@ -78,6 +85,7 @@ final class HostTests: XCTestCase {
     func testHealthTrafficCannotPreventIdleCleanup() throws {
         let backend = ControlledBackend()
         let (paths, session, finished) = try host(timeout: 0.4, backend: backend)
+        let observed = try call(paths, session: session, op: "observe")["result"] as! [String: Any]
         let deadline = Date().addingTimeInterval(1.2)
         var checks = 0
         while Date() < deadline {
@@ -88,6 +96,8 @@ final class HostTests: XCTestCase {
         wait(for: [finished], timeout: 2)
         XCTAssertGreaterThan(checks, 2)
         XCTAssertEqual(try jsonObject(Data(contentsOf: paths.exit))["reason"] as? String, "idle_timeout")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: observed["screenshot"] as! String))
+        XCTAssertThrowsError(try call(paths, session: session, op: "inspect", fields: ["reference": "o1", "offset": 0]))
     }
 
     func testInFlightCommandSurvivesTimeoutAndRenewsAtCompletion() throws {
@@ -159,5 +169,55 @@ final class HostTests: XCTestCase {
         XCTAssertThrowsError(try DeviceLock(root: directory, device: "device-1"))
         first = nil
         XCTAssertNoThrow(try DeviceLock(root: directory, device: "device-1"))
+    }
+
+    func testInspectDoesNotCallDeviceAndDispatchedOpenInvalidatesCachedRefs() throws {
+        let backend = ControlledBackend()
+        let (paths, session, finished) = try host(timeout: 5, backend: backend)
+        let observed = try call(paths, session: session, op: "observe")["result"] as! [String: Any]
+        let image = observed["screenshot"] as! String
+        let inspect: [String: Any] = ["reference": "o1:e27", "offset": 0]
+        func validity() throws -> String? {
+            (try call(paths, session: session, op: "inspect", fields: inspect)["result"] as? [String: Any])?["refs"] as? String
+        }
+        XCTAssertEqual(try validity(), "current")
+        _ = try call(paths, session: session, op: "open") // Invalid parameter, never admitted.
+        XCTAssertEqual(try validity(), "current")
+        backend.rejectOpenBeforeSend = true
+        XCTAssertEqual(try call(paths, session: session, op: "open", fields: ["bundleId": "fixture"])["outcome"] as? String, "not_dispatched")
+        XCTAssertEqual(try validity(), "current")
+        backend.rejectOpenBeforeSend = false
+        backend.loseOpenResponse = true
+        XCTAssertEqual(try call(paths, session: session, op: "open", fields: ["bundleId": "fixture"])["outcome"] as? String, "unknown")
+        XCTAssertEqual(try validity(), "invalidated")
+        XCTAssertEqual(backend.observeCount, 1)
+        XCTAssertEqual(backend.openCount, 1)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: image))
+        _ = try call(paths, session: session, op: "observe")
+        backend.loseOpenResponse = false
+        _ = try call(paths, session: session, op: "open", fields: ["bundleId": "fixture"])
+        let latest = try call(paths, session: session, op: "inspect", fields: ["reference": "o2:e27", "offset": 0])
+        XCTAssertEqual((latest["result"] as? [String: Any])?["refs"] as? String, "invalidated")
+        _ = try call(paths, session: session, op: "disconnect")
+        wait(for: [finished], timeout: 3)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: image))
+    }
+
+    func testObservationAndInspectRenewIdleButInvalidInspectDoesNot() throws {
+        let backend = ControlledBackend()
+        let (paths, session, finished) = try host(timeout: 5, backend: backend)
+        _ = try call(paths, session: session, op: "observe")
+        let first = try call(paths, session: session, op: "status")["idleRemainingSeconds"] as! Double
+        Thread.sleep(forTimeInterval: 0.1)
+        let invalid = try call(paths, session: session, op: "inspect", fields: ["reference": "o99", "offset": 0])
+        XCTAssertEqual(invalid["ok"] as? Bool, false)
+        let afterInvalid = try call(paths, session: session, op: "status")["idleRemainingSeconds"] as! Double
+        XCTAssertLessThan(afterInvalid, first - 0.08)
+        _ = try call(paths, session: session, op: "inspect", fields: ["reference": "o1", "offset": 0])
+        let renewed = try call(paths, session: session, op: "status")["idleRemainingSeconds"] as! Double
+        XCTAssertGreaterThan(renewed, afterInvalid + 0.08)
+        XCTAssertEqual(backend.observeCount, 1)
+        _ = try call(paths, session: session, op: "disconnect")
+        wait(for: [finished], timeout: 3)
     }
 }

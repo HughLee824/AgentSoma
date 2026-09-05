@@ -15,18 +15,20 @@ struct SessionOptions: ParsableArguments {
 struct AgentSoma: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "agentsoma", abstract: "Eyes and hands for agents operating a real iPhone.",
-        subcommands: [Connect.self, Status.self, Open.self, Disconnect.self, Host.self])
+        subcommands: [Connect.self, Status.self, Open.self, Observe.self, Inspect.self, Disconnect.self, Host.self])
     @OptionGroup var options: SessionOptions
 }
 
-private func output(_ operation: () throws -> [String: Any]) throws {
+private func output(compact: Bool = false, _ operation: () throws -> [String: Any]) throws {
     let response: [String: Any]
     do { response = try operation() }
     catch {
         response = ["ok": false, "error": ["code": (error as? SomaError)?.code ?? "command_failed",
                                             "message": String(describing: error)]]
     }
-    print(String(decoding: try jsonData(response), as: UTF8.self))
+    if compact, response["ok"] as? Bool == true, let result = response["result"] as? [String: Any],
+       let text = result["text"] as? String { print(text) }
+    else { print(String(decoding: try jsonData(response), as: UTF8.self)) }
     if response["ok"] as? Bool != true { throw ExitCode.failure }
 }
 
@@ -70,6 +72,28 @@ struct Disconnect: ParsableCommand {
     mutating func run() throws {
         let session = try options.requiredSession()
         try output { try SessionClient.call(session: session, operation: "disconnect") }
+    }
+}
+
+struct Observe: ParsableCommand {
+    static let configuration = CommandConfiguration(abstract: "Capture a screenshot and compact AX text with new element references.")
+    @OptionGroup var options: SessionOptions
+    mutating func run() throws {
+        let session = try options.requiredSession()
+        try output(compact: true) { try SessionClient.call(session: session, operation: "observe") }
+    }
+}
+
+struct Inspect: ParsableCommand {
+    static let configuration = CommandConfiguration(abstract: "Read a cached observation or subtree without recapturing or renewing references.")
+    @OptionGroup var options: SessionOptions
+    @Argument(help: "Observation or element reference, such as o1 or o1:e2.") var reference: String
+    @Option(help: "Node offset within the cached subtree, returned by a previous inspect page.") var offset = 0
+    mutating func run() throws {
+        let session = try options.requiredSession()
+        try output(compact: true) {
+            try SessionClient.call(session: session, operation: "inspect", fields: ["reference": reference, "offset": offset])
+        }
     }
 }
 

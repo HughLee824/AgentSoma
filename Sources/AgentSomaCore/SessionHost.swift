@@ -5,6 +5,7 @@ final class SessionHost {
     private let paths: SessionPaths
     private let config: HostConfiguration
     private let backend: SessionBackend
+    private let observations: ObservationCache
     private let control = DispatchQueue(label: "agentsoma.host.control")
     private let work = DispatchQueue(label: "agentsoma.host.device")
     private let done = DispatchSemaphore(value: 0)
@@ -18,6 +19,7 @@ final class SessionHost {
         self.config = config
         self.paths = paths
         self.backend = backend
+        observations = ObservationCache(directory: paths.directory)
         lifecycle = SessionLifecycle(timeout: config.idleTimeoutSeconds)
     }
 
@@ -78,13 +80,25 @@ final class SessionHost {
                    "outcome": "not_dispatched", "error": ["code": code, "message": message]], {})
         }
         guard request["version"] as? Int == 1, request["session"] as? String == config.session,
-              !id.isEmpty, ["status", "open", "disconnect"].contains(operation) else {
+              !id.isEmpty, ["status", "open", "observe", "inspect", "disconnect"].contains(operation) else {
             reject("invalid_request", "Invalid session request")
             return
         }
         if operation == "open" {
             guard let bundle = request["bundleId"] as? String, !bundle.isEmpty, bundle.utf8.count <= 255 else {
                 reject("invalid_bundle_id", "A bundle identifier is required")
+                return
+            }
+        }
+        var reference: ObservationReference?
+        if operation == "inspect" {
+            do {
+                reference = try ObservationReference(request["reference"] as? String ?? "")
+                guard let offset = request["offset"] as? Int, offset >= 0 else {
+                    throw SomaError("invalid_offset", "A nonnegative offset is required")
+                }
+            } catch {
+                reject((error as? SomaError)?.code ?? "invalid_reference", String(describing: error))
                 return
             }
         }
@@ -99,18 +113,38 @@ final class SessionHost {
         }
         work.async { [self] in
             var response: [String: Any] = ["id": id, "session": config.session, "ok": true]
+            var previousObservation: String?
+            var effective = operation == "open"
             do {
-                response["result"] = try operation == "status" ? backend.status() : backend.open(bundle: request["bundleId"] as! String)
-                if operation == "open" { response["outcome"] = "completed" }
+                switch operation {
+                case "status": response["result"] = try backend.status()
+                case "open":
+                    previousObservation = observations.beginAction()
+                    response["result"] = try backend.open(bundle: request["bundleId"] as! String)
+                    observations.finishAction(previous: previousObservation, dispatched: true)
+                    response["outcome"] = "completed"
+                case "observe":
+                    observations.invalidate("superseded")
+                    response["result"] = try observations.store(backend.observe())
+                    effective = true
+                case "inspect":
+                    response["result"] = try observations.inspect(reference!, offset: request["offset"] as! Int)
+                    effective = true
+                default: break
+                }
             } catch {
                 response["ok"] = false
                 let uncertain = (error as? TransportError)?.possiblySent ?? false
-                if operation == "open" { response["outcome"] = uncertain ? "unknown" : "not_dispatched" }
+                if operation == "open" {
+                    observations.finishAction(previous: previousObservation, dispatched: uncertain)
+                    response["outcome"] = uncertain ? "unknown" : "not_dispatched"
+                }
+                if operation == "status" { observations.invalidate("backend_unavailable") }
                 response["error"] = ["code": (error as? SomaError)?.code ?? "backend_error", "message": String(describing: error)]
             }
             // The control queue serializes command admission against expiry and completion.
             control.sync {
-                lifecycle.finish(effective: operation == "open", at: ProcessInfo.processInfo.systemUptime)
+                lifecycle.finish(effective: effective, at: ProcessInfo.processInfo.systemUptime)
                 if operation == "status" {
                     response["hostPid"] = ProcessInfo.processInfo.processIdentifier
                     response["idleTimeoutSeconds"] = config.idleTimeoutSeconds
@@ -128,9 +162,12 @@ final class SessionHost {
         server?.stopAccepting()
         // Already admitted work finishes first on this same serial queue.
         work.async { [self] in
-            let cleanup = backend.stop()
+            var cleanup = backend.stop()
+            do { try observations.clear(); cleanup["observationCacheRemoved"] = true }
+            catch { cleanup["observationCacheRemoved"] = false; cleanup["cacheError"] = String(describing: error) }
             let clean = cleanup["xcodebuildExited"] as? Bool == true && cleanup["forced"] as? Bool != true
                 && cleanup["shutdownAcknowledged"] as? Bool == true && cleanup["xcodebuildExitCode"] as? Int == 0
+                && cleanup["observationCacheRemoved"] as? Bool == true
             let result: [String: Any] = ["session": config.session, "reason": reason,
                 "hostPid": ProcessInfo.processInfo.processIdentifier, "backend": backendInfo,
                 "cleanup": cleanup, "endedAt": Date().timeIntervalSince1970]

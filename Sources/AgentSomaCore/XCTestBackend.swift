@@ -7,6 +7,7 @@ protocol SessionBackend: AnyObject {
     func start() throws -> [String: Any]
     func status() throws -> [String: Any]
     func open(bundle: String) throws -> [String: Any]
+    func observe() throws -> CapturedObservation
     func stop() -> [String: Any]
 }
 
@@ -67,8 +68,8 @@ final class XCTestBackend: SessionBackend {
             // Only startup health checks retry. No UI command is sent until readiness succeeds.
             if let response = try? request("ping", timeout: 1), response["ok"] as? Bool == true,
                let result = response["result"] as? [String: Any] {
-                guard result["lifecycleOwner"] as? String == "host" else {
-                    throw SomaError("runner_needs_rebuild", "Rebuild the Runner with host-managed lifetime support")
+                guard result["lifecycleOwner"] as? String == "host", result["observationVersion"] as? Int == 1 else {
+                    throw SomaError("runner_needs_rebuild", "Rebuild the Runner with host-managed lifetime and observation support")
                 }
                 identity = response["sessionId"] as? String
                 runnerPID = response["runnerPid"] as? Int
@@ -135,6 +136,15 @@ final class XCTestBackend: SessionBackend {
             throw TransportError(description: response["error"] as? String ?? "Runner rejected open", possiblySent: true)
         }
         return response["result"] as? [String: Any] ?? [:]
+    }
+
+    func observe() throws -> CapturedObservation {
+        let response = try request("observe")
+        guard let result = response["result"] as? [String: Any],
+              response["ok"] as? Bool == true || result["axStatus"] as? String == "unavailable" else {
+            throw SomaError("observe_failed", response["error"] as? String ?? "Runner did not return an observation")
+        }
+        return try XCTestCapture.decode(result)
     }
 
     func stop() -> [String: Any] {
