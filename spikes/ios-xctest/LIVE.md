@@ -8,6 +8,8 @@
 
 2026-09-05 又完成了无需 iproxy / pymobiledevice3 的 [CoreDevice 原生直连验证](NATIVE.md)，并已确认产品采用 Swift CLI 与按会话运行的宿主。本文的 Python/iproxy 路径和未选型描述保留为历史实验记录。
 
+当前 Runner 的动作入口已改为携带观察目标描述的 `act`，由正式 CLI 构造并在设备执行前校验。下文旧 `tap/type/swipe` 探针消息不能直接用于当前构建；后续操作使用 [CLI 动作接口](../../docs/actions.md)。历史结果对应各证据目录记录的源码版本。
+
 ## 结果与证据
 
 主会话 `FFED37E9-D61F-4A8D-9AEA-A5B197ED3F16`，Runner PID `8127`，请求序号连续为 1–32，全部响应保持相同会话 ID 和 PID。源码哈希在会话前后相同。

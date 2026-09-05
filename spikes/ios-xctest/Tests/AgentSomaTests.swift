@@ -97,7 +97,9 @@ final class AgentSomaTests: XCTestCase {
         field.typeText("👩‍💻e\u{301} replacement")
         XCTAssertEqual(field.value as? String, "👩‍💻e\u{301} replacement")
         field.typeKey("a", modifierFlags: .command)
-        field.typeKey(.delete, modifierFlags: [])
+        field.typeText(XCUIKeyboardKey.delete.rawValue)
+        let cleared = field.value as? String
+        XCTAssertTrue(cleared == nil || cleared == "" || cleared == field.placeholderValue, "Selection must be deleted before new input")
         field.typeText("Final")
         XCTAssertEqual(field.value as? String, "Final")
         try save("input-primitives", app: app)

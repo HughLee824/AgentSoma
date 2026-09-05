@@ -6,6 +6,8 @@
 
 后续进展：同日下一阶段已实现最小 CLI / 宿主和空闲回收，并有独立的 [宿主验收记录](../../docs/session-host.md)。本文以下内容保留为前一轮通信探针的证据，不将后续能力计入本轮。
 
+当前 Runner 已接入宿主观察目标校验和执行事实，旧探针的直接动作消息属于历史协议。复现后续操作请使用 [正式 CLI 动作接口](../../docs/actions.md)，本文的原始通信证据保持不变。
+
 ## 实际路径与最小改动
 
 `Swift 探针 → Network.framework TCP → CoreDevice IPv6 → 薄 XCTest Runner`

@@ -2,8 +2,14 @@ import Network
 import XCTest
 
 private struct CommandError: Error, CustomStringConvertible {
+    let code: String
     let description: String
-    init(_ message: String) { description = message }
+    let requiresObservation: Bool
+    init(_ code: String, requiresObservation: Bool = false, message: String? = nil) {
+        self.code = code
+        self.description = message ?? code
+        self.requiresObservation = requiresObservation
+    }
 }
 
 private final class CommandServer {
@@ -87,10 +93,12 @@ final class LiveSessionTests: XCTestCase {
     private var currentApp: XCUIApplication?
     private var currentBundleID: String?
     private var commandIssues: [String] = []
+    private var handlingCommand = false
+    private var executionStarted = false
 
     override func record(_ issue: XCTIssue) {
-        commandIssues.append(issue.compactDescription)
-        super.record(issue)
+        if handlingCommand { commandIssues.append(issue.compactDescription) }
+        else { super.record(issue) }
     }
 
     @MainActor
@@ -114,6 +122,8 @@ final class LiveSessionTests: XCTestCase {
         for await request in server.requests {
             sequence += 1
             commandIssues = []
+            handlingCommand = true
+            executionStarted = false
             let began = ProcessInfo.processInfo.systemUptime
             let command = request.body
             var response: [String: Any] = [
@@ -125,12 +135,18 @@ final class LiveSessionTests: XCTestCase {
             do {
                 guard command["token"] as? String == token else { throw CommandError("unauthorized") }
                 response["result"] = try execute(command)
-                if !commandIssues.isEmpty { throw CommandError(commandIssues.joined(separator: "\n")) }
+                try checkIssues()
                 response["ok"] = true
                 stopping = command["op"] as? String == "shutdown"
             } catch {
                 response["ok"] = false
                 response["error"] = String(describing: error)
+                response["errorCode"] = (error as? CommandError)?.code ?? "xctest_error"
+                response["requiresObservation"] = (error as? CommandError)?.requiresObservation ?? true
+            }
+            handlingCommand = false
+            if ["launch", "act"].contains(command["op"] as? String ?? "") {
+                response["execution"] = ["started": executionStarted, "completed": response["ok"] as? Bool == true]
             }
             response["runnerMs"] = (ProcessInfo.processInfo.systemUptime - began) * 1000
             try await server.reply(response, to: request)
@@ -146,7 +162,7 @@ final class LiveSessionTests: XCTestCase {
         if op == "ping" {
             let hostManaged = ProcessInfo.processInfo.environment["AGENTSOMA_HOST_MANAGED"] == "1"
             return ["protocol": "agentsoma-spike-jsonl-v1", "lifecycleOwner": hostManaged ? "host" : "spike",
-                    "lifetimeLimitSeconds": hostManaged ? NSNull() : 900, "observationVersion": 1]
+                    "lifetimeLimitSeconds": hostManaged ? NSNull() : 900, "observationVersion": 1, "actionVersion": 1]
         }
         if op == "shutdown" { return ["stopped": true] }
         if op == "launch" {
@@ -155,7 +171,8 @@ final class LiveSessionTests: XCTestCase {
                 throw CommandError("bundle_not_allowed_in_spike")
             }
             let app = XCUIApplication(bundleIdentifier: bundle)
-            if app.state == .notRunning { app.launch() } else { app.activate() }
+            let state = app.state
+            try event { if state == .notRunning { app.launch() } else { app.activate() } }
             guard app.state == .runningForeground else { throw CommandError("app_not_foreground") }
             currentApp = app
             currentBundleID = bundle
@@ -169,64 +186,131 @@ final class LiveSessionTests: XCTestCase {
                 return observe(springboard, root: alerts.firstMatch, scope: "systemAlert")
             }
             if count == 0, let app = currentApp, app.state == .runningForeground {
-                return observe(app, root: app, scope: "app")
+                let localAlerts = app.alerts
+                if localAlerts.count == 1 { return observe(app, root: localAlerts.firstMatch, scope: "appAlert") }
+                if localAlerts.count == 0 { return observe(app, root: app, scope: "app") }
+                return observe(nil, root: nil, scope: "unknown", error: "multiple_app_alerts")
             }
             return observe(nil, root: nil, scope: "unknown",
                            error: count > 1 ? "multiple_system_alerts" : "foreground_app_unknown")
         }
-        guard var app = currentApp else { throw CommandError("launch_an_app_first") }
-        let scope = command["scope"] as? String ?? "app"
-        var root: XCUIElement = app
-        switch scope {
-        case "app":
-            guard app.state == .runningForeground else { throw CommandError("app_not_foreground") }
-        case "systemAlert":
-            guard currentBundleID == "com.somnus.agentsoma.spike.fixture", ["observe", "tap"].contains(op) else {
-                throw CommandError("system_alert_scope_not_allowed")
-            }
-            app = XCUIApplication(bundleIdentifier: "com.apple.springboard")
-            let alerts = app.alerts
-            guard alerts.count == 1 else { throw CommandError("system_alert_count_\(alerts.count)") }
-            root = alerts.firstMatch
-        default: throw CommandError("unknown_scope")
+        guard op == "act" else { throw CommandError("unknown_operation") }
+        return try perform(command)
+    }
+
+    private func checkIssues() throws {
+        if !commandIssues.isEmpty { throw CommandError("xctest_error", message: commandIssues.joined(separator: "\n")) }
+    }
+
+    @MainActor
+    private func event(_ body: () -> Void) throws {
+        try checkIssues()
+        executionStarted = true // Before entering any API that can send input, including focus/select-all.
+        body()
+        try checkIssues()       // Never continue a multi-primitive input after an XCTest failure.
+    }
+
+    @MainActor
+    private func perform(_ command: [String: Any]) throws -> [String: Any] {
+        guard let kind = command["kind"] as? String, ["tap", "swipe", "type"].contains(kind),
+              let expected = command["target"] as? [String: Any],
+              let scope = expected["scope"] as? String,
+              let path = expected["path"] as? [[String: Any]], !path.isEmpty, path.count <= 200 else {
+            throw CommandError("invalid_action")
         }
-        if op == "tap", let x = command["x"] as? Double, let y = command["y"] as? Double {
-            guard command["identifier"] == nil, x.isFinite, y.isFinite,
-                  root.frame.contains(CGPoint(x: x, y: y)) else { throw CommandError("invalid_screen_point") }
+        let direction = command["direction"] as? String
+        let mode = command["mode"] as? String
+        let text = command["text"] as? String
+        if kind == "swipe", !["up", "down", "left", "right"].contains(direction ?? "") { throw CommandError("invalid_direction") }
+        if kind == "type" {
+            guard ["insert", "replace"].contains(mode ?? ""), let text, text.utf8.count <= 4096,
+                  mode == "replace" || !text.isEmpty,
+                  text.unicodeScalars.allSatisfy({
+                      let v = $0.value
+                      return v >= 32 && v != 127 && v != 133 && v != 0x2028 && v != 0x2029 && !(0xF700...0xF8FF).contains(v)
+                  }) else { throw CommandError("invalid_text") }
+        }
+        guard expected["bundleId"] as? String == currentBundleID else { throw CommandError("app_changed", requiresObservation: true) }
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let systemAlerts = springboard.alerts
+        let app: XCUIApplication
+        let root: XCUIElement
+        if scope == "systemAlert" {
+            guard systemAlerts.count == 1 else { throw CommandError("system_alert_changed", requiresObservation: true) }
+            app = springboard; root = systemAlerts.firstMatch
+        } else {
+            guard let currentApp, currentApp.state == .runningForeground, systemAlerts.count == 0 else {
+                throw CommandError("app_context_changed", requiresObservation: true)
+            }
+            app = currentApp
+            let alerts = app.alerts
+            if scope == "appAlert", alerts.count == 1 { root = alerts.firstMatch }
+            else if scope == "app", alerts.count == 0 { root = app }
+            else { throw CommandError("app_alert_changed", requiresObservation: true) }
+        }
+        var snapshot = try root.snapshot()
+        for (index, expectedNode) in path.enumerated() {
+            if index > 0 {
+                guard let child = expectedNode["childIndex"] as? Int, snapshot.children.indices.contains(child) else {
+                    throw CommandError("target_path_changed", requiresObservation: true)
+                }
+                snapshot = snapshot.children[child]
+            }
+            guard matches(snapshot, expected: expectedNode) else { throw CommandError("target_changed", requiresObservation: true) }
+        }
+        if command["x"] != nil || command["y"] != nil {
+            guard kind == "tap", path.count == 1, let x = command["x"] as? Double, let y = command["y"] as? Double,
+                  x.isFinite, y.isFinite, root.frame.contains(CGPoint(x: x, y: y)) else { throw CommandError("invalid_screen_point") }
             let frame = app.frame
-            app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: x - frame.minX, dy: y - frame.minY)).tap()
+            try event { app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: x - frame.minX, dy: y - frame.minY)).tap() }
             return ["coordinateSpace": "screen_points", "x": x, "y": y]
         }
-        guard ["tap", "type", "swipe"].contains(op) else { throw CommandError("unknown_operation") }
-        guard let identifier = command["identifier"] as? String, !identifier.isEmpty else {
-            throw CommandError("identifier_required")
+        let target: XCUIElement
+        if path.count == 1 { target = root }
+        else {
+            let predicate = NSPredicate(format: "identifier == %@ AND label == %@", snapshot.identifier, snapshot.label)
+            let matches = root.descendants(matching: snapshot.elementType).matching(predicate)
+            let count = matches.count
+            guard count == 1 else { throw CommandError(count == 0 ? "target_missing" : "ambiguous_target", requiresObservation: count == 0) }
+            target = matches.firstMatch
         }
-        var elementType = XCUIElement.ElementType.any
-        if let raw = command["elementType"] {
-            guard let value = raw as? UInt, let type = XCUIElement.ElementType(rawValue: value) else {
-                throw CommandError("invalid_element_type")
-            }
-            elementType = type
-        }
-        let matches = root.descendants(matching: elementType).matching(identifier: identifier)
-        guard matches.count == 1 else { throw CommandError("element_match_count_\(matches.count)") }
-        let target = matches.firstMatch
-        guard target.isHittable else { throw CommandError("element_not_hittable") }
-        switch op {
-        case "tap": target.tap()
-        case "type":
-            guard let text = command["text"] as? String, text.count <= 1024 else { throw CommandError("invalid_text") }
-            target.tap()
-            target.typeText(text)
+        guard matches(try target.snapshot(), expected: path.last!) else { throw CommandError("target_changed", requiresObservation: true) }
+        guard target.isEnabled else { throw CommandError("target_disabled") }
+        guard target.isHittable else { throw CommandError("target_not_hittable") }
+        switch kind {
+        case "tap": try event { target.tap() }
         case "swipe":
-            switch command["direction"] as? String {
-            case "up": target.swipeUp()
-            case "down": target.swipeDown()
-            default: throw CommandError("direction_must_be_up_or_down")
+            try event {
+                switch direction {
+                case "up": target.swipeUp()
+                case "down": target.swipeDown()
+                case "left": target.swipeLeft()
+                default: target.swipeRight()
+                }
             }
+        case "type":
+            guard [XCUIElement.ElementType.textField, .secureTextField, .textView, .searchField].contains(target.elementType) else {
+                throw CommandError("not_text_input")
+            }
+            if mode == "replace" {
+                try event { target.tap() }
+                try event { target.typeKey("a", modifierFlags: .command) }
+                if text?.isEmpty == true { try event { target.typeText(XCUIKeyboardKey.delete.rawValue) } }
+            }
+            if let text, !text.isEmpty { try event { target.typeText(text) } }
         default: break
         }
-        return ["identifier": identifier]
+        return ["kind": kind]
+    }
+
+    private func matches(_ node: XCUIElementSnapshot, expected: [String: Any]) -> Bool {
+        guard expected["type"] as? UInt == node.elementType.rawValue,
+              expected["identifier"] as? String == node.identifier, expected["label"] as? String == node.label,
+              expected["enabled"] as? Bool == node.isEnabled,
+              let frame = expected["frame"] as? [String: Any] else { return false }
+        let actual: [String: Double] = ["x": node.frame.minX, "y": node.frame.minY, "width": node.frame.width, "height": node.frame.height]
+        guard actual.allSatisfy({ key, value in (frame[key] as? Double).map { $0.isFinite && abs($0 - value) <= 0.5 } == true }) else { return false }
+        return NSDictionary(dictionary: ["value": node.value ?? NSNull()]).isEqual(to: ["value": expected["value"] ?? NSNull()])
     }
 
     @MainActor
@@ -255,9 +339,9 @@ final class LiveSessionTests: XCTestCase {
         let screenshot = XCUIScreen.main.screenshot()
         let frame = app?.frame
         return [
-            "bundleId": scope == "systemAlert" ? "com.apple.springboard" : (scope == "app" ? currentBundleID as Any? ?? NSNull() : NSNull()),
+            "bundleId": scope == "systemAlert" ? "com.apple.springboard" : (app != nil ? currentBundleID as Any? ?? NSNull() : NSNull()),
             "targetBundleId": currentBundleID as Any? ?? NSNull(), "scope": scope,
-            "foregroundBundleId": scope == "app" ? currentBundleID as Any? ?? NSNull() : NSNull(),
+            "foregroundBundleId": ["app", "appAlert"].contains(scope) ? currentBundleID as Any? ?? NSNull() : NSNull(),
             "appState": app.map { $0.state.rawValue as Any } ?? NSNull(),
             "screenFrame": frame.map { ["x": $0.minX, "y": $0.minY, "width": $0.width, "height": $0.height] as Any } ?? NSNull(),
             "coordinateSpace": "screen_points", "nodes": nodes, "truncated": truncated,
