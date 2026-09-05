@@ -77,4 +77,29 @@ final class AgentSomaTests: XCTestCase {
         }
         try save("calculator-result", app: app)
     }
+
+    @MainActor
+    func test05TextEditingPrimitives() throws {
+        let app = XCUIApplication()
+        app.launch()
+        let field = app.textFields["input"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        let beforeFocus = field.hasFocus
+        field.tap()
+        let afterFocus = field.hasFocus
+        print("AGENTSOMA_INPUT_FOCUS before=\(beforeFocus) after=\(afterFocus)")
+        field.typeText("ABCDE")
+        field.typeKey(.leftArrow, modifierFlags: [])
+        field.typeKey(.leftArrow, modifierFlags: [])
+        field.typeText("北京")
+        XCTAssertEqual(field.value as? String, "ABC北京DE")
+        field.typeKey("a", modifierFlags: .command)
+        field.typeText("👩‍💻e\u{301} replacement")
+        XCTAssertEqual(field.value as? String, "👩‍💻e\u{301} replacement")
+        field.typeKey("a", modifierFlags: .command)
+        field.typeKey(.delete, modifierFlags: [])
+        field.typeText("Final")
+        XCTAssertEqual(field.value as? String, "Final")
+        try save("input-primitives", app: app)
+    }
 }
