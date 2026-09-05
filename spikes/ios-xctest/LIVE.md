@@ -46,7 +46,7 @@
 
 ## 实现
 
-- [LiveSessionTests.swift](Tests/LiveSessionTests.swift)：一个异步 XCTest 用例保持指令循环，使用 Apple Network.framework 接收 JSON 行，以 Apple XCTest API 操作界面。
+- [LiveSessionTests.swift](../../Runner/LiveSessionTests.swift)：一个异步 XCTest 用例保持指令循环，使用 Apple Network.framework 接收 JSON 行，以 Apple XCTest API 操作界面。源码现由独立 Runner 工程持有，旧探针通过 project.yml 引用同一文件。
 - [live.py](live.py)：Mac 端启动与调用工具，仅使用 Python 标准库；启动器调用已有 `iproxy` 和 `xcodebuild`。
 - 原有 [AgentSomaTests.swift](Tests/AgentSomaTests.swift) 四项测试保持独立。未提供会话 token 时，新的持续会话用例会跳过；原有 pymobiledevice3 启动脚本显式排除它。
 

@@ -5,7 +5,7 @@ import Darwin
 public enum SessionClient {
     public static func connect(device: String, xctestrun: URL, idleTimeout: IdleTimeout) throws -> [String: Any] {
         guard FileManager.default.isReadableFile(atPath: xctestrun.path), xctestrun.pathExtension == "xctestrun" else {
-            throw SomaError("runner_not_built", "Provide a readable, signed .xctestrun using --xctestrun")
+            throw SomaError("runner_not_built", "Run build-runner, then provide its readable .xctestrun path using --xctestrun")
         }
         umask(0o077)
         let session = "s" + UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()

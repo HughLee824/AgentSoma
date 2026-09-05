@@ -19,7 +19,7 @@
 
 本次使用的地址为 `fd97:fbf3:2b4f::1`，路由接口是 `utun9`，CoreDevice 报告 `transportType: wired`。预检和实际启动曾返回不同地址，因此每次建立会话都要重新发现，不能硬编码或跨会话复用旧地址。地址仅是本次证据。
 
-源码：[Runner](Tests/LiveSessionTests.swift)、[Swift 探针](NativeTransportProbe.swift)。探针没有增加源码库或外部设备工具依赖。构建沿用已有 Xcode 工程，不需要再次运行 XcodeGen。
+源码：[Runner](../../Runner/LiveSessionTests.swift)、[Swift 探针](NativeTransportProbe.swift)。探针没有增加源码库或外部设备工具依赖。本轮验证时构建沿用已有 Xcode 工程；后续 Runner 源码已移到独立工程，重新构建旧探针时需按更新后的 project.yml 生成工程。
 
 ## 结果
 

@@ -104,7 +104,7 @@ final class LiveSessionTests: XCTestCase {
     @MainActor
     func testCommandSession() async throws {
         guard let token = ProcessInfo.processInfo.environment["AGENTSOMA_SESSION_TOKEN"], token.count >= 32 else {
-            throw XCTSkip("Start through a spike launcher to enable the bounded command session")
+            throw XCTSkip("Start through agentsoma connect to enable the command session")
         }
         continueAfterFailure = true
         let server = try CommandServer()

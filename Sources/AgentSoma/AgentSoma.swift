@@ -15,7 +15,7 @@ struct SessionOptions: ParsableArguments {
 struct AgentSoma: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "agentsoma", abstract: "Eyes and hands for agents operating a real iPhone.",
-        subcommands: [Devices.self, Connect.self, Status.self, Apps.self, Open.self, Observe.self, Inspect.self, Tap.self, Swipe.self, TypeText.self, Disconnect.self, Host.self])
+        subcommands: [BuildRunner.self, Devices.self, Connect.self, Status.self, Apps.self, Open.self, Observe.self, Inspect.self, Tap.self, Swipe.self, TypeText.self, Disconnect.self, Host.self])
     @OptionGroup var options: SessionOptions
 }
 
@@ -32,10 +32,23 @@ private func output(compact: Bool = false, _ operation: () throws -> [String: An
     if response["ok"] as? Bool != true { throw ExitCode.failure }
 }
 
+struct BuildRunner: ParsableCommand {
+    static let configuration = CommandConfiguration(commandName: "build-runner", abstract: "Build and verify the signed Runner using Xcode; return its .xctestrun path.")
+    @Option(help: "AgentSoma source checkout; defaults to the current directory.") var sourceRoot = "."
+    @Option(help: "Apple development team ID; omit to use the Runner project's signing settings.") var team: String?
+    @Option(help: "Runner test bundle ID; omit to use the Runner project's signing settings.") var bundleID: String?
+
+    mutating func run() throws {
+        try output {
+            ["ok": true, "result": try RunnerBuild.build(sourceRoot: URL(fileURLWithPath: sourceRoot), team: team, bundleID: bundleID)]
+        }
+    }
+}
+
 struct Connect: ParsableCommand {
     static let configuration = CommandConfiguration(abstract: "Start a session and return once the Runner is ready.")
     @Option(help: "Connected iPhone UDID or CoreDevice identifier.") var device: String
-    @Option(help: "Signed .xctestrun produced by the current Runner build.") var xctestrun: String
+    @Option(help: "Signed .xctestrun path returned by build-runner.") var xctestrun: String
     @Option(help: "Idle duration, such as 30m, 60m or 10s.") var idleTimeout = "30m"
 
     mutating func run() throws {

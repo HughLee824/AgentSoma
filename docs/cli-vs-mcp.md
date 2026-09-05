@@ -51,7 +51,7 @@ MCP 的工具结果支持文本与图片内容。[MCP 工具结果](https://mode
 
 Apple 文档确认 Xcode 15 起通过网络接口与 USB 连接的设备通信。[Apple TN3158](https://developer.apple.com/documentation/technotes/tn3158-resolving-xcode-15-device-connection-issues) 作为实现参考，gstack 的源码通过 `devicectl device info details --json-output` 获取 CoreDevice IPv6 地址，再连接设备自定义服务端口；其代码还单独处理通道保活。这支持直连方向，但不是我们当前 macOS 15 / Xcode 16 环境的实测结论，也不意味着引入该项目。[地址发现与保活源码](https://github.com/garrytan/gstack/blob/main/ios-qa/daemon/src/devicectl.ts)、[直连请求源码](https://github.com/garrytan/gstack/blob/main/ios-qa/daemon/src/tunnel-bootstrap.ts)
 
-早期 CoreDevice tunnel + RSD 访问仍由 `pymobiledevice3` 辅助建立通道。[早期实验](../spikes/ios-direct/README.md) 新验证直接使用 Apple `devicectl` JSON 发现 IPv6 地址，通过环境变量让 [Runner](../spikes/ios-xctest/Tests/LiveSessionTests.swift) 仅绑定这个具体地址，并保留 token 认证。Swift 原生客户端已完成截图、AX 与点击闭环，约 60 秒命令间隔后仍使用同一 Runner，显式结束后本轮进程退出，XCTest 1 项通过、0 失败。[本机实测](../spikes/ios-xctest/NATIVE.md)
+早期 CoreDevice tunnel + RSD 访问仍由 `pymobiledevice3` 辅助建立通道。[早期实验](../spikes/ios-direct/README.md) 新验证直接使用 Apple `devicectl` JSON 发现 IPv6 地址，通过环境变量让 [Runner](../Runner/LiveSessionTests.swift) 仅绑定这个具体地址，并保留 token 认证。Swift 原生客户端已完成截图、AX 与点击闭环，约 60 秒命令间隔后仍使用同一 Runner，显式结束后本轮进程退出，XCTest 1 项通过、0 失败。[本机实测](../spikes/ios-xctest/NATIVE.md)
 
 这轮没有引入第三方转发工具或额外保活轮询；xcodebuild 持续持有 XCTest 管理会话。该通信探针本身不证明产品空闲策略或异常恢复；后续宿主已单独验证缩短为 8 秒的回收策略，默认值为 30 分钟。CoreDevice 地址在预检与启动之间曾变化，建立新会话时必须重新发现地址。
 

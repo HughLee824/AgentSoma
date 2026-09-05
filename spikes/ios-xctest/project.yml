@@ -22,7 +22,7 @@ targets:
   AgentSomaTests:
     type: bundle.ui-testing
     platform: iOS
-    sources: [Tests]
+    sources: [Tests, ../../Runner/LiveSessionTests.swift]
     dependencies:
       - target: Fixture
     settings:
