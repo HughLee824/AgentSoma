@@ -51,6 +51,10 @@ Runner 使用仓库内的[独立 Xcode 工程](Runner/AgentSomaRunner.xcodeproj/
 
 `type oN:eN --mode insert --text ...` 保留现有光标，需要输入框已有键盘焦点；需要聚焦时先 tap、再 observe。`--mode replace` 聚焦并替换全部内容，空字符串表示清空，两种模式都不自动提交。文本源也可选 `--stdin < text.txt`，与 `--text` 互斥，按原文读取 UTF-8 至 EOF；仍限制 4096 字节并拒绝末尾换行。`press oN:eN --key return` 使用已有焦点发送独立 Return，完成后重新 observe 核对效果。`swipe oN:eN --direction up` 的方向表示手指移动方向；坐标点击使用 `tap oN --x X --y Y`，单位为屏幕点。
 
+`tap/swipe/type/press` 在全部输入调用结束后自动检测画面稳定：约每 200ms 采样，至少 3 帧的全帧像素 SHA-256 一致且覆盖至少 400ms，才返回 `completed`。结果包含 `execution.inputCompleted`、`stability` 和 `frame.screenshot` 本地路径。5 秒检测预算内未稳定则返回 `unknown` / `frame_stability_timeout`，保留输入事实与最后一帧；调用 agent 先观察，不重发，也不额外猜测“等待 Lark 动画”。当前协议为 `actionVersion=3`，已有旧 Runner 需重新构建。
+
+调用 agent 的命令执行工具若提前返回后台任务 ID（例如 `exec_command` 的 `session_id`），必须保留完整返回对象，并通过对应的续读工具（例如 `write_stdin`）取得原命令的退出码和输出。这个 ID 属于命令执行工具，与 AgentSoma 的设备 `session` 不同。不能只打印 `output` 而丢弃任务 ID，也不能用固定 sleep 加重复 `status` 来猜测原命令是否结束。
+
 ## 生命周期与输出
 
 - 默认空闲 **30 分钟**；建立连接时可用 `--idle-timeout 60m` 调整，也接受 `s`、`m`、`h`，便于用短时间验收。
@@ -62,7 +66,7 @@ Runner 使用仓库内的[独立 Xcode 工程](Runner/AgentSomaRunner.xcodeproj/
 
 状态目录默认为 `/private/tmp/agentsoma-<uid>`，目录权限 0700；可通过 `AGENTSOMA_STATE_DIR` 设置较短的替代路径。每个会话包含本地 Unix socket、启动配置和诊断文件。设备 token 只保存在宿主内存及 XCTest 子进程环境，不写入配置文件或 CLI 输出。相同状态目录内对设备规范 UDID 使用系统文件锁，拒绝重复占用；锁文件保留，锁本身随持有进程退出而释放。
 
-观察默认最多 60 行、8 KiB，超预算内容明确提示并可 inspect；源采集最多 200 个节点，未采集部分不能从旧快照补取。宿主只缓存最近两次观察。open 或设备动作正常完成、结果 unknown 后旧引用失效；确认目标已变化时同样失效，读取旧快照不恢复引用。截图与 AX 分开采集，不保证界面已稳定，agent 可根据截图再 observe。
+观察默认最多 60 行、8 KiB，超预算内容明确提示并可 inspect；源采集最多 200 个节点，未采集部分不能从旧快照补取。宿主只缓存最近两次观察和最后一次动作的结果帧。open 或设备动作正常完成、结果 unknown 后旧引用失效；确认目标已变化时同样失效，读取旧快照不恢复引用。动作的稳定帧不生成 AX 或引用，后续按引用操作仍须 observe；独立 observe 的截图与 AX 分开采集，不保证原子一致或持续稳定。
 
 断开或到期后 socket 和观察缓存删除，原 session 不能继续调用。诊断文件暂时保留供开发排查，清理这些文件不负责断开活跃会话。当前不承诺宿主遭 SIGKILL、Mac 重启、物理断线或设备锁屏后的自动恢复；也不依据磁盘里的 PID 自动重连或重放请求。
 

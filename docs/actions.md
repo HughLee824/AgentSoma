@@ -40,23 +40,31 @@ agentsoma --session "$SESSION" tap o11 --x 100 --y 200
 
 App 内唯一 Alert 现在单独作为 `scope=appAlert` 采集，SpringBoard Alert 使用 `scope=systemAlert`。原来没有弹窗的观察不会被用于点击后来出现的弹窗。
 
-Runner 没有缓存、短引用、续期计时或任务策略。它只处理当前请求的验证与 XCTest 调用，并返回执行事实。它也不等待业务状态成功或自动重拍；截图与 AX 的非原子采集限制继续成立。
+Runner 没有跨请求观察缓存、短引用、续期计时或任务策略。它处理当前请求的验证与 XCTest 调用，并在全部输入步骤结束后采帧判断稳定。它不等待业务状态成功；截图与 AX 的非原子采集限制继续成立。
 
 ## 执行结果
 
 进入会话的动作结果均为单行 JSON，并保留请求 ID 和 session。stdin 的读取、编码或字节上限错误在 CLI 创建请求前返回 `ok=false`、`outcome=not_dispatched` 和 error，此时没有会话请求关联字段。文本源选择等语法错误继续由 ArgumentParser 输出到 stderr 并非零退出。
 
 ```json
-{"id":"example-request","session":"example-session","ok":true,"outcome":"completed","result":{"kind":"tap"}}
+{"id":"example-request","session":"example-session","ok":true,"outcome":"completed","result":{"kind":"tap","execution":{"started":true,"inputCompleted":true,"completed":true},"stability":{"stable":true,"samples":4,"consecutiveFrames":4,"stableForMs":563,"elapsedMs":750,"hash":"example-sha256","algorithm":"sha256-rgba8-srgb","sampleIntervalMs":200,"requiredStableMs":400,"timeoutMs":5000},"frame":{"screenshot":"/private/tmp/agentsoma-501/example-session/observations/action/screen.png","hash":"example-sha256","capturedAt":1788608247.676,"width":1170,"height":2532},"runnerMs":3634}}
 ```
 
 | outcome | 判定 | 引用处理 |
 | --- | --- | --- |
-| completed | 本动作的 XCTest 调用正常返回；不等于业务目标达成 | 旧引用失效，agent 再 observe |
+| completed | 本动作全部输入调用正常返回，且动作后全帧 hash 达到稳定；不等于业务目标达成 | 旧引用失效，agent 再 observe |
 | not_dispatched | 参数、引用或设备目标校验在任何输入 API 调用前拒绝 | 无其他失效原因时保留；若已发现目标或上下文变化则失效 |
-| unknown | 已进入可能发送输入的 API 后出错、缺失/矛盾的执行事实，或丢失响应 | 旧引用失效；不重发，agent 先 observe |
+| unknown | 输入后未达到帧稳定、已进入输入 API 后出错、执行事实缺失/矛盾，或丢失响应 | 旧引用失效；不重发，agent 先 observe |
 
-每次调用可能发送输入的 API 前，Runner 标记 execution.started；任一步骤记录 XCTest 错误就停止，不再继续聚焦后的选区/删除/输入等剩余步骤。只有全部调用正常结束才返回 completed。App 打开也沿用该事实协议。
+每次调用可能发送输入的 API 前，Runner 标记 `execution.started`；任一步骤记录 XCTest 错误就停止，不再继续聚焦后的选区/删除/输入等剩余步骤。全部输入调用正常结束时标记 `execution.inputCompleted`，之后才开始检测帧稳定。App 打开继续使用启动/激活的 started/completed 事实，不纳入 act 的帧检测。
+
+采帧间隔约 200ms，至少 3 帧精确 hash 相同且采样时间跨度至少 400ms 才报告完成；变化会重置稳定窗口，不要求画面先发生变化。图像经方向归一化后，以全尺寸 sRGB RGBA8 像素和尺寸计算 SHA-256，忽略 PNG 编码元数据。哈希计算耗时计入 5 秒预算，但不计入两次采帧之间的稳定跨度。没有区域遮罩或感知相似容差。
+
+5 秒预算到期时返回 `unknown` 和 `frame_stability_timeout`，同时保留 `result.execution.inputCompleted=true`、`result.stability.stable=false` 与最后一帧。该结果确认输入已经完成，只是未获得稳定画面；不能把它解释为没有点击或允许重发。截图/解码失败同样保留可取得的事实；连接丢失且无响应时无法承诺最后一帧可用。预算在截图和处理之间检查，无法中断正在阻塞的 XCTest 截图 API，因此它不是整个 act 的硬超时。
+
+结果只返回最终一张 PNG 的路径和采集时间，不向 agent 输出逐帧图片或 base64。宿主核对图片 hash 与稳定证据后，保存在 `observations/action/screen.png`；下一次带帧的动作覆盖它，disconnect/空闲回收时删除。需要保留时由调用 agent 复制。动作帧不创建观察 ID，不附带旧 AX；后续按引用操作仍需 observe。
+
+Runner 在每个输入原语调用期间，将 XCTest application-state 等待上限设为 1 秒并在结束后恢复原值。这通过运行时能力检查后的 `_XCTApplicationStateTimeout` / `_XCTSetApplicationStateTimeout` 符号实现，没有引入 WDA。连接时能力缺失返回 `unsupported_xctest_runtime`；该内部 API 的兼容性仅在本次工具链/设备上验证，1 秒也不是整个动作的耗时上限。
 
 XCTest 的命令错误经 Runner 转成响应；不再把已经返回给调用方的正常运行时错误一并算作 Runner 整个持续会话的 XCTest 失败。会话外的测试断言和异常结束仍由 XCTest 记录。
 
@@ -66,7 +74,7 @@ XCTest 的命令错误经 Runner 转成响应；不再把已经返回给调用�
 
 原始输入探针和修正经过见 [输入原语记录](../spikes/ios-xctest/INPUT.md)。最初“全选、Delete、再输入”的探针没有单独断言清空，非空输入覆盖选区掩盖了 `typeKey(.delete)` 在本设备上不删除选区的问题。现已改为文本删除字符，并在固定测试中加入删除后的即时断言。
 
-当前使用 build-runner 构建并签名的 Runner。新增 Return 后设备动作协议为 `actionVersion=2`；旧产物连接时返回 `runner_needs_rebuild`，需重新 build-runner 并将新路径用于 connect。第 5 阶段已实现设备/App 发现并移除 open 的 Fixture/Calculator 范围限制，补充了 Settings 导航点击证据，见 [完整调用验收](discovery.md)。下方保留第 4 阶段的原始动作验收统计。支持证据来自当前 iOS 26.6 的受控 Fixture，不代表所有输入法、自定义编辑器或 App 已完成验证。执行前检查也不构成与 App 自行变化原子隔离的事务。
+当前使用 build-runner 构建并签名的 Runner。帧稳定契约将设备动作协议提升为 `actionVersion=3`、`frameStabilityVersion=1`；旧产物连接时返回 `runner_needs_rebuild`，需重新 build-runner 并将新路径用于 connect。第 5 阶段已实现设备/App 发现并移除 open 的 Fixture/Calculator 范围限制，补充了 Settings 导航点击证据，见 [完整调用验收](discovery.md)。下方保留第 4 阶段的原始动作验收统计。支持证据来自当前 iOS 26.6 的受控 Fixture 和本次 Lark 验证，不代表所有输入法、自定义编辑器或 App 已完成验证。执行前检查也不构成与 App 自行变化原子隔离的事务。
 
 ## 验收结果
 
@@ -97,3 +105,47 @@ XCTest 的命令错误经 Runner 转成响应；不再把已经返回给调用�
 Return 使用 `typeText(XCUIKeyboardKey.return.rawValue)`，其中键常量由 [Apple XCTest API](https://developer.apple.com/documentation/xcuiautomation/xcuikeyboardkey/return) 提供；上面的实际提交效果来自本轮真机证据。此轮仅验证原生 Fixture 的 Return，未扩展到 WebView Return、其他编辑器、更多按键或多行/更长文本。无焦点行为仍受前述 XCTest 内部重试限制约束。
 
 本地证据（git 忽略）在 `spikes/ios-xctest/evidence/input-cli-20260905-01/`，包括 commands.json、六份文本/PNG/节点、stdin 输入文件、local-cli.json、verification.json、源码 SHA256、构建/测试日志及 run.xcresult。Python 记录器仅为开发验收保存 CLI 输出，不属于产品运行链路。
+
+## Lark 等待与帧稳定验收
+
+2026-09-05，同一 Mac/Xcode/iPhone 环境，本次修改后的两个独立签名 Runner 会话共完成 9 个动作，全部返回 `completed`。第一轮验证输入和菜单路径；随后将稳定跨度严格改为采帧时间差、排除 hash 处理延迟，并用最终构建复测空白点击和菜单开关。表中 CLI 耗时从进程开始到退出，Runner 耗时包含目标检查、输入和帧检测；帧检测是其中的一部分，不能相加。
+
+| 场景 | CLI 秒 | Runner 秒 | 帧检测秒 | 采帧数 |
+| --- | ---: | ---: | ---: | ---: |
+| 打开菜单 | 3.75 | 3.634 | 0.749 | 4 |
+| 关闭菜单 | 4.11 | 3.956 | 0.750 | 4 |
+| 打开搜索框 | 4.22 | 4.090 | 1.557 | 8 |
+| replace 输入 Hugh | 3.87 | 3.728 | 1.169 | 6 |
+| replace 清空 | 5.53 | 3.751 | 1.362 | 7 |
+| 取消搜索 | 2.70 | 2.556 | 0.747 | 4 |
+| 最终构建：空白区域点击 | 3.83 | 3.711 | 0.748 | 4 |
+| 最终构建：打开菜单 | 3.78 | 3.646 | 0.753 | 4 |
+| 最终构建：关闭菜单 | 3.96 | 3.828 | 0.747 | 4 |
+
+两轮日志中的 14 段动画通知等待均为 1.00–1.02 秒，原任务约 60 秒的平台消失。通知缺失提示仍存在，所以结论是已限制 XCTest 等待，并非已定位通知缺失的内部原因。搜索输入后的 AX 值为 Hugh，清空后的值为空；最后截图确认返回原会话列表，未创建群或发送消息。
+
+`swift test` 最终 47 项通过、0 失败。新增覆盖 PNG 元数据无关性、单像素/尺寸变化、至少三帧与时间窗口的双重条件、变化重置、无变化可完成、处理耗时不得充当稳定时间、超过检测预算不得成功，以及 unknown 保留输入事实/最后一帧、旧引用不能导致再次派发。持续变化超时由确定性本地测试覆盖，本轮未在真机制造持续动画或截图 API 阻塞；不能据此承诺所有 App 都能在 5 秒内稳定。
+
+两个持续会话的 XCTest 均正常通过，disconnect 收到 shutdown 确认、xcodebuild 退出码 0、未强制终止；`ipc.sock` 和观察目录均删除。最终 Runner 构建目录为 `.build/runner/8ada7cc1-d447-46e9-a764-b6a528ea37ac/`。本地证据（git 忽略）在 `spikes/ios-xctest/evidence/frame-stability-20260905-01/`：逐动作 JSON/PNG/CLI 耗时、输入前后 AX、两份 Runner 日志、Swift 测试日志和含源码 SHA-256 的 verification.json。
+
+## Lark 建群与发送完整复测
+
+2026-09-05，用户明确要求再次创建 Lark 群聊并发送消息。复用上述最终 Runner 构建，创建新的默认群 Hugh（1 member），发送“大家好！这是 AgentSoma 优化后的测试消息。”。截图核对了新群的创建提示、完整消息正文和绿色勾选；发送后输入框为空。群和消息保留在 Lark 中。
+
+| 动作 | CLI 秒 | 帧检测秒 | 采帧数 | 结果 |
+| --- | ---: | ---: | ---: | --- |
+| 打开新建菜单 | 3.771 | 0.760 | 3 | completed |
+| 进入 New Group | 3.730 | 0.736 | 4 | completed |
+| Create 创建群 | 4.160 | 1.157 | 6 | completed |
+| replace 输入测试消息 | 9.859 | 1.371 | 7 | completed |
+| 点击发送 | 6.823 | 3.426 | 17 | completed |
+
+全部 5 个设备动作通过稳定检测，没有 unknown、重放或固定 sleep；每个动作结束后调用 observe 获取新引用。发送时实际采了 17 帧才稳定，这一等待来自帧比较结果，不能从中推断具体是哪种动画。日志中 15 段 XCTest 动画通知超时均为 1.00–1.02 秒，无 60 秒等待。
+
+耗时采用三个口径，避免把设备执行时间当成完整用户等待时间：
+
+- 首次工具记录时间 19:58:18 至实际读图确认 20:03:53：约 **5 分 35 秒**，包含读取历史上下文、准备本地记录器、审批、调用与核对，不含其后的清理和报告整理。
+- connect 开始 20:00:12.377 至最后 observe 结束 20:03:47.298：**3 分 34.921 秒**。
+- 上述 13 条 CLI 命令累计 **48.115 秒**，其中 connect 15.143 秒、5 个动作共 **28.343 秒**。其余 **166.805 秒**在命令执行区间之外，混合了模型读图/决策、工具调度和自动审批，当前记录没有将这些因素逐一拆分。不能声称完整流程只用了 48 秒，也尚未达到此前提出的完整流程 1–3 分钟目标。
+
+第 14 条命令 disconnect 用时 0.505 秒，shutdown 已确认、XCTest 通过、xcodebuild 正常退出，socket 和观察缓存已删除。本次未修改产品源码，也未重新构建 Runner。原始命令/输出、六份观察、各动作结果帧、XCTest 日志、记录器及 verification.json 均保存在 `spikes/ios-xctest/evidence/lark-e2e-20260905-01/`（git 忽略）。

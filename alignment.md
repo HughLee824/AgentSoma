@@ -28,6 +28,7 @@ The interface is recorded in [the interface draft](docs/agent-interface.md), wit
 - Complete independence from WebDriverAgent is the preferred technical outcome and must be tested early.
 - Use a self-authored thin Swift/XCTest Runner as the initial device backend, while preserving the option to replace it when native device capabilities suffice. Native CoreDevice-to-Runner communication has passed the bounded single-device probe; product lifecycle and recovery guarantees remain implementation work.
 - Keep any Runner as thin as practical and preserve the possibility of removing it; reducing host-process count must not shift growing product responsibilities into the Runner.
+- User-confirmed completion update (2026-09-05; implementation authorized by “开始修改”): after an `act` finishes sending all input events, AgentSoma compares subsequent full-frame pixel hashes and waits for visual stability before reporting completion. The implementation uses normalized sRGB RGBA8 SHA-256, approximately 200ms sampling, at least 3 identical frames over 400ms, and a 5-second sampling budget. An unstable result preserves completed-input facts and the last frame, invalidates old refs and never triggers a replay. This describes device state, not business success. XCTest application-state waits are separately bounded through a capability-checked runtime API. See [the action contract and validation](docs/actions.md).
 - Android, device farms, a test DSL, a standalone deterministic runner, and CI integration are not current commitments.
 
 ## Territory evidence
