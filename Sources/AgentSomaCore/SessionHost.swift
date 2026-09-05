@@ -158,6 +158,7 @@ final class SessionHost {
             } catch {
                 response["ok"] = false
                 let failure = error as? ActionFailure
+                if let result = failure?.result { response["result"] = result }
                 let uncertain = failure?.possiblyExecuted ?? (error as? TransportError)?.possiblySent ?? false
                 if operation == "open" || action != nil {
                     observations.finishAction(previous: previousObservation, dispatched: uncertain)

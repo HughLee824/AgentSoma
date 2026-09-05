@@ -1,5 +1,30 @@
 import Network
 import XCTest
+import Darwin
+
+// These XCTest symbols are runtime capabilities, not a public API or a linked WDA dependency.
+private struct XCTestStateTimeout {
+    private typealias Getter = @convention(c) () -> Double
+    private typealias Setter = @convention(c) (Double) -> Void
+    private let get: Getter
+    private let set: Setter
+
+    init?() {
+        let symbols = UnsafeMutableRawPointer(bitPattern: -2) // RTLD_DEFAULT
+        guard let getter = dlsym(symbols, "_XCTApplicationStateTimeout"),
+              let setter = dlsym(symbols, "_XCTSetApplicationStateTimeout") else { return nil }
+        get = unsafeBitCast(getter, to: Getter.self)
+        set = unsafeBitCast(setter, to: Setter.self)
+    }
+
+    // All callers are synchronous on the Runner's main actor; always restore XCTest's setting.
+    func perform(_ body: () throws -> Void) rethrows {
+        let previous = get()
+        set(1)
+        defer { set(previous) }
+        try body()
+    }
+}
 
 private struct CommandError: Error, CustomStringConvertible {
     let code: String
@@ -95,6 +120,10 @@ final class LiveSessionTests: XCTestCase {
     private var commandIssues: [String] = []
     private var handlingCommand = false
     private var executionStarted = false
+    private var inputCompleted = false
+    private let stateTimeout = XCTestStateTimeout()
+    private var frameStability: FrameStability?
+    private var actionFrame: (png: Data, capturedAt: Double, fingerprint: FrameFingerprint)?
 
     override func record(_ issue: XCTIssue) {
         if handlingCommand { commandIssues.append(issue.compactDescription) }
@@ -124,6 +153,9 @@ final class LiveSessionTests: XCTestCase {
             commandIssues = []
             handlingCommand = true
             executionStarted = false
+            inputCompleted = false
+            frameStability = nil
+            actionFrame = nil
             let began = ProcessInfo.processInfo.systemUptime
             let command = request.body
             var response: [String: Any] = [
@@ -134,7 +166,7 @@ final class LiveSessionTests: XCTestCase {
             var stopping = false
             do {
                 guard command["token"] as? String == token else { throw CommandError("unauthorized") }
-                response["result"] = try execute(command)
+                response["result"] = try await execute(command)
                 try checkIssues()
                 response["ok"] = true
                 stopping = command["op"] as? String == "shutdown"
@@ -145,24 +177,36 @@ final class LiveSessionTests: XCTestCase {
                 response["requiresObservation"] = (error as? CommandError)?.requiresObservation ?? true
             }
             handlingCommand = false
-            if ["launch", "act"].contains(command["op"] as? String ?? "") {
+            if command["op"] as? String == "launch" {
                 response["execution"] = ["started": executionStarted, "completed": response["ok"] as? Bool == true]
+            }
+            if command["op"] as? String == "act" {
+                response["execution"] = ["started": executionStarted, "inputCompleted": inputCompleted,
+                                         "completed": response["ok"] as? Bool == true]
+                response["stability"] = frameStability?.result
+                if let frame = actionFrame {
+                    response["frame"] = ["screenshotBase64": frame.png.base64EncodedString(),
+                        "capturedAt": frame.capturedAt, "hash": frame.fingerprint.hash,
+                        "width": frame.fingerprint.width, "height": frame.fingerprint.height]
+                }
             }
             response["runnerMs"] = (ProcessInfo.processInfo.systemUptime - began) * 1000
             try await server.reply(response, to: request)
-            print("AGENTSOMA_COMMAND sequence=\(sequence) op=\(command["op"] ?? "missing") ok=\(response["ok"] ?? false)")
+            print("AGENTSOMA_COMMAND id=\(command["id"] ?? "missing") sequence=\(sequence) op=\(command["op"] ?? "missing") ok=\(response["ok"] ?? false) runnerMs=\(response["runnerMs"] ?? 0)")
             if stopping { didShutdown = true; break }
         }
         XCTAssertTrue(didShutdown, "Session ended without an explicit shutdown command")
     }
 
     @MainActor
-    private func execute(_ command: [String: Any]) throws -> [String: Any] {
+    private func execute(_ command: [String: Any]) async throws -> [String: Any] {
         let op = command["op"] as? String ?? ""
         if op == "ping" {
             let hostManaged = ProcessInfo.processInfo.environment["AGENTSOMA_HOST_MANAGED"] == "1"
             return ["protocol": "agentsoma-spike-jsonl-v1", "lifecycleOwner": hostManaged ? "host" : "spike",
-                    "lifetimeLimitSeconds": hostManaged ? NSNull() : 900, "observationVersion": 1, "actionVersion": 2, "launchVersion": 1]
+                    "lifetimeLimitSeconds": hostManaged ? NSNull() : 900, "observationVersion": 1,
+                    "actionVersion": 3, "launchVersion": 1, "frameStabilityVersion": 1,
+                    "applicationStateTimeoutSupported": stateTimeout != nil]
         }
         if op == "shutdown" { return ["stopped": true] }
         if op == "launch" {
@@ -195,7 +239,10 @@ final class LiveSessionTests: XCTestCase {
                            error: count > 1 ? "multiple_system_alerts" : "foreground_app_unknown")
         }
         guard op == "act" else { throw CommandError("unknown_operation") }
-        return try perform(command)
+        let result = try perform(command)
+        inputCompleted = true
+        try await waitForStableFrame()
+        return result
     }
 
     private func checkIssues() throws {
@@ -205,9 +252,35 @@ final class LiveSessionTests: XCTestCase {
     @MainActor
     private func event(_ body: () -> Void) throws {
         try checkIssues()
+        guard let stateTimeout else { throw CommandError("unsupported_xctest_runtime") }
         executionStarted = true // Before entering any API that can send input, including focus/select-all.
-        body()
+        stateTimeout.perform(body)
         try checkIssues()       // Never continue a multi-primitive input after an XCTest failure.
+    }
+
+    @MainActor
+    private func waitForStableFrame() async throws {
+        var stability = FrameStability(startedAt: ProcessInfo.processInfo.systemUptime)
+        frameStability = stability
+        while stability.remaining(at: ProcessInfo.processInfo.systemUptime) > 0 {
+            let began = ProcessInfo.processInfo.systemUptime
+            let screenshot = XCUIScreen.main.screenshot()
+            let captureFinished = ProcessInfo.processInfo.systemUptime
+            let capturedAt = Date().timeIntervalSince1970
+            let png = screenshot.pngRepresentation
+            let fingerprint = try FrameFingerprint(png: png)
+            stability.record(hash: fingerprint.hash, capturedAt: captureFinished,
+                             processedAt: ProcessInfo.processInfo.systemUptime)
+            frameStability = stability
+            actionFrame = (png, capturedAt, fingerprint)
+            try checkIssues()
+            if stability.stable { return }
+            let now = ProcessInfo.processInfo.systemUptime
+            let delay = min(max(0, FrameStability.sampleInterval - (now - began)), stability.remaining(at: now))
+            if delay > 0 { try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000)) }
+        }
+        throw CommandError("frame_stability_timeout", requiresObservation: true,
+                           message: "Input completed, but screen frames did not stabilize within 5 seconds; do not replay the action")
     }
 
     @MainActor

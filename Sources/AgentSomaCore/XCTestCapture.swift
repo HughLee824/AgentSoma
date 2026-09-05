@@ -3,6 +3,53 @@ import ImageIO
 
 // Decode the Runner's selected snapshot attributes without parsing debugDescription.
 enum XCTestCapture {
+    // Keep only the latest action frame; the observation cache clears this directory on disconnect.
+    static func actionResponse(_ response: [String: Any], directory: URL) throws -> [String: Any] {
+        var result = response["result"] as? [String: Any] ?? [:]
+        result["execution"] = response["execution"]
+        result["stability"] = response["stability"]
+        result["runnerMs"] = response["runnerMs"]
+        let execution = response["execution"] as? [String: Any]
+        let stability = response["stability"] as? [String: Any]
+        do {
+            if let frame = response["frame"] as? [String: Any] {
+                guard let encoded = frame["screenshotBase64"] as? String, let png = Data(base64Encoded: encoded),
+                      let capturedAt = frame["capturedAt"] as? Double, capturedAt.isFinite else {
+                    throw SomaError("invalid_action_frame", "Runner did not return a valid action frame")
+                }
+                let fingerprint = try FrameFingerprint(png: png)
+                guard frame["hash"] as? String == fingerprint.hash,
+                      stability?["hash"] as? String == fingerprint.hash,
+                      frame["width"] as? Int == fingerprint.width, frame["height"] as? Int == fingerprint.height else {
+                    throw SomaError("invalid_action_frame", "Action frame does not match its stability evidence")
+                }
+                let frames = directory.appendingPathComponent("observations/action")
+                try SessionPaths.secureDirectory(frames)
+                let file = frames.appendingPathComponent("screen.png")
+                try png.write(to: file, options: .atomic)
+                try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
+                result["frame"] = ["screenshot": file.path, "hash": fingerprint.hash, "capturedAt": capturedAt,
+                                   "width": fingerprint.width, "height": fingerprint.height]
+            }
+            if response["ok"] as? Bool == true {
+                guard execution?["inputCompleted"] as? Bool == true, stability?["stable"] as? Bool == true,
+                      let frames = stability?["consecutiveFrames"] as? Int, frames >= 3,
+                      let stableFor = stability?["stableForMs"] as? Double, stableFor >= FrameStability.stableDuration * 1000,
+                      let elapsed = stability?["elapsedMs"] as? Double, elapsed.isFinite,
+                      elapsed >= stableFor, elapsed < FrameStability.timeout * 1000,
+                      response["frame"] is [String: Any], result["frame"] != nil else {
+                    throw SomaError("missing_stability_facts", "Runner did not confirm input completion and frame stability")
+                }
+            }
+        } catch {
+            throw ActionFailure(code: (error as? SomaError)?.code ?? "action_frame_unavailable",
+                description: String(describing: error), possiblyExecuted: true, requiresObservation: true, result: result)
+        }
+        var decoded = response
+        decoded["result"] = result
+        return decoded
+    }
+
     static func decode(_ result: [String: Any]) throws -> CapturedObservation {
         guard let encoded = result["screenshotBase64"] as? String,
               let png = Data(base64Encoded: encoded), png.starts(with: [137, 80, 78, 71, 13, 10, 26, 10]),

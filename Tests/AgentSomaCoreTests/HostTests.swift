@@ -345,4 +345,24 @@ final class HostTests: XCTestCase {
         _ = try call(paths, session: session, op: "disconnect")
         wait(for: [finished], timeout: 3)
     }
+
+    func testUnstableFramePreservesCompletedInputAndCannotReplayAnOldReference() throws {
+        let backend = ControlledBackend()
+        backend.actionFailure = ActionFailure(code: "frame_stability_timeout", description: "Screen still changing",
+            possiblyExecuted: true, requiresObservation: true,
+            result: ["execution": ["started": true, "inputCompleted": true, "completed": false],
+                     "stability": ["stable": false], "frame": ["screenshot": "/last-action.png"]])
+        let (paths, session, finished) = try host(timeout: 5, backend: backend)
+        _ = try call(paths, session: session, op: "observe")
+        let result = try call(paths, session: session, op: "tap", fields: ["reference": "o1:e11"])
+        XCTAssertEqual(result["outcome"] as? String, "unknown")
+        let details = result["result"] as? [String: Any]
+        XCTAssertEqual((details?["execution"] as? [String: Bool])?["inputCompleted"], true)
+        XCTAssertEqual((details?["stability"] as? [String: Bool])?["stable"], false)
+        let retry = try call(paths, session: session, op: "tap", fields: ["reference": "o1:e11"])
+        XCTAssertEqual(retry["outcome"] as? String, "not_dispatched")
+        XCTAssertEqual(backend.actionCount, 1)
+        _ = try call(paths, session: session, op: "disconnect")
+        wait(for: [finished], timeout: 3)
+    }
 }

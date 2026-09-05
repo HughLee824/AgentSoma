@@ -22,7 +22,7 @@ targets:
   AgentSomaTests:
     type: bundle.ui-testing
     platform: iOS
-    sources: [Tests, ../../Runner/LiveSessionTests.swift]
+    sources: [Tests, ../../Runner/LiveSessionTests.swift, ../../Sources/AgentSomaCore/FrameStability.swift]
     dependencies:
       - target: Fixture
     settings:

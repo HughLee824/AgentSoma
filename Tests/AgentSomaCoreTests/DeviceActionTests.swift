@@ -42,6 +42,7 @@ final class DeviceActionTests: XCTestCase {
         let cases: [([String: Any], Bool)] = [
             (["ok": false, "execution": ["started": false, "completed": false]], false),
             (["ok": false, "execution": ["started": true, "completed": false]], true),
+            (["ok": false, "execution": ["started": false, "inputCompleted": true, "completed": false]], true),
             (["ok": true], true),
             (["ok": true, "execution": ["started": false, "completed": true]], true),
             (["ok": true, "execution": ["started": true, "completed": false]], true)

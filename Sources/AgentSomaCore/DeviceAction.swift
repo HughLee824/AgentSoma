@@ -61,6 +61,15 @@ struct ActionFailure: Error, CustomStringConvertible {
     let description: String
     let possiblyExecuted: Bool
     let requiresObservation: Bool
+    let result: [String: Any]?
+
+    init(code: String, description: String, possiblyExecuted: Bool, requiresObservation: Bool, result: [String: Any]? = nil) {
+        self.code = code
+        self.description = description
+        self.possiblyExecuted = possiblyExecuted
+        self.requiresObservation = requiresObservation
+        self.result = result
+    }
 }
 
 enum ActionReply {
@@ -68,13 +77,14 @@ enum ActionReply {
         guard let execution = response["execution"] as? [String: Any],
               let started = execution["started"] as? Bool, let completed = execution["completed"] as? Bool else {
             throw ActionFailure(code: "missing_execution_facts", description: "Runner omitted execution facts; observe before deciding what to do next",
-                                possiblyExecuted: true, requiresObservation: true)
+                                possiblyExecuted: true, requiresObservation: true, result: response["result"] as? [String: Any])
         }
         if response["ok"] as? Bool == true, completed, started { return response["result"] as? [String: Any] ?? [:] }
-        let invalidFacts = completed || response["ok"] as? Bool == true
+        let invalidFacts = completed || response["ok"] as? Bool == true || execution["inputCompleted"] as? Bool == true
         throw ActionFailure(code: response["errorCode"] as? String ?? "action_failed",
             description: response["error"] as? String ?? "Device action did not complete",
             possiblyExecuted: started || invalidFacts,
-            requiresObservation: response["requiresObservation"] as? Bool == true || started || invalidFacts)
+            requiresObservation: response["requiresObservation"] as? Bool == true || started || invalidFacts,
+            result: response["result"] as? [String: Any])
     }
 }

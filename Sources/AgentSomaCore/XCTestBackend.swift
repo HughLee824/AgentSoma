@@ -73,8 +73,12 @@ final class XCTestBackend: SessionBackend {
             if let response = try? request("ping", timeout: 1), response["ok"] as? Bool == true,
                let result = response["result"] as? [String: Any] {
                 guard result["lifecycleOwner"] as? String == "host", result["observationVersion"] as? Int == 1,
-                      result["actionVersion"] as? Int == 2, result["launchVersion"] as? Int == 1 else {
-                    throw SomaError("runner_needs_rebuild", "Run build-runner for current action support, including press --key return, then connect with its new .xctestrun")
+                      result["actionVersion"] as? Int == 3, result["launchVersion"] as? Int == 1,
+                      result["frameStabilityVersion"] as? Int == 1 else {
+                    throw SomaError("runner_needs_rebuild", "Run build-runner for frame-stable actions, then connect with its new .xctestrun")
+                }
+                guard result["applicationStateTimeoutSupported"] as? Bool == true else {
+                    throw SomaError("unsupported_xctest_runtime", "This XCTest runtime cannot bound application-state waits; see \(logURL.path)")
                 }
                 identity = response["sessionId"] as? String
                 runnerPID = response["runnerPid"] as? Int
@@ -139,7 +143,8 @@ final class XCTestBackend: SessionBackend {
         guard try jsonData(fields).count <= 60_000 else {
             throw SomaError("target_too_large", "Target attributes exceed the Runner request budget")
         }
-        return try ActionReply.decode(request("act", fields: fields))
+        let response = try request("act", fields: fields)
+        return try ActionReply.decode(XCTestCapture.actionResponse(response, directory: paths.directory))
     }
 
     func observe() throws -> CapturedObservation {
