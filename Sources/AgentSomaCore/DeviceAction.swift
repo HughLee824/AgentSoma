@@ -1,4 +1,5 @@
 import Foundation
+import CoreFoundation
 
 struct DeviceAction {
     static let operations = ["tap", "swipe", "type", "press"]
@@ -6,23 +7,32 @@ struct DeviceAction {
     let reference: ObservationReference
     let fields: [String: Any]
     let coordinate: Bool
+    let guardPolicy: ScreenGuard.Policy
+    let protectedReferences: [ObservationReference]
 
     init(operation: String, request: [String: Any]) throws {
         guard Self.operations.contains(operation) else { throw SomaError("invalid_action", "Unknown device action") }
         kind = operation
         reference = try ObservationReference(request["reference"] as? String ?? "")
-        coordinate = request["x"] != nil || request["y"] != nil
+        let coordinateKeys = ["x", "y", "fromX", "fromY", "toX", "toY"]
+        coordinate = coordinateKeys.contains { request[$0] != nil }
         var fields: [String: Any] = ["kind": operation]
         if coordinate {
-            guard operation == "tap", reference.node == nil,
-                  let x = (request["x"] as? NSNumber)?.doubleValue, let y = (request["y"] as? NSNumber)?.doubleValue, x.isFinite, y.isFinite else {
-                throw SomaError("invalid_coordinates", "Use tap oN --x X --y Y with finite screen point coordinates")
+            let required = operation == "tap" ? ["x", "y"] : (operation == "swipe" ? ["fromX", "fromY", "toX", "toY"] : [])
+            guard !required.isEmpty, reference.node == nil,
+                  coordinateKeys.filter({ request[$0] != nil }).count == required.count else {
+                throw SomaError("invalid_coordinates", "Use tap oN --x --y, or swipe oN --from-x --from-y --to-x --to-y")
             }
-            fields["x"] = x; fields["y"] = y
+            for key in required {
+                guard let value = Self.number(request[key]) else { throw SomaError("invalid_coordinates", "Supply every coordinate as a finite number of screen points") }
+                fields[key] = value
+            }
         } else if reference.node == nil {
             throw SomaError("element_required", "Use an element reference such as o1:e2")
         }
-        if operation == "swipe" {
+        if operation == "swipe", coordinate {
+            guard request["direction"] == nil else { throw SomaError("invalid_direction", "Coordinate swipes use endpoints, not --direction") }
+        } else if operation == "swipe" {
             guard let direction = request["direction"] as? String, ["up", "down", "left", "right"].contains(direction) else {
                 throw SomaError("invalid_direction", "Direction must be up, down, left or right")
             }
@@ -46,7 +56,38 @@ struct DeviceAction {
             guard request["key"] as? String == "return" else { throw SomaError("invalid_key", "Use --key return") }
             fields["key"] = "return"
         }
+        var policy = ScreenGuard.Policy()
+        var protected: [ObservationReference] = []
+        if ["tap", "swipe"].contains(operation) {
+            if request["maxScreenChange"] != nil {
+                guard let value = Self.number(request["maxScreenChange"]) else { throw SomaError("invalid_screen_guard_policy", "Screen change limit must be finite") }
+                policy.maxScreenChange = value
+            }
+            if request["maxRegionChange"] != nil {
+                guard let value = Self.number(request["maxRegionChange"]) else { throw SomaError("invalid_screen_guard_policy", "Region change limit must be finite") }
+                policy.maxRegionChange = value
+            }
+            guard policy.valid else { throw SomaError("invalid_screen_guard_policy", "Require 0 <= max-region-change <= max-screen-change <= 1") }
+            if let value = request["protect"] {
+                guard let refs = value as? [String], refs.count <= 3 else { throw SomaError("invalid_protected_regions", "Protect up to three element references from the same observation") }
+                let observation = reference.observation
+                protected = try refs.map { value in
+                    let ref = try ObservationReference(value)
+                    guard ref.observation == observation, ref.node != nil else {
+                        throw SomaError("invalid_protected_regions", "Protected elements must belong to the action's observation")
+                    }
+                    return ref
+                }
+            }
+        }
+        guardPolicy = policy
+        protectedReferences = protected
         self.fields = fields
+    }
+
+    private static func number(_ value: Any?) -> Double? {
+        guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID(), number.doubleValue.isFinite else { return nil }
+        return number.doubleValue
     }
 }
 
@@ -54,6 +95,7 @@ struct ObservedTarget {
     let context: [String: Any]
     // Root through target, with each child's position within its captured parent.
     let path: [[String: Any]]
+    var gesture: CoordinateGesture? = nil
 }
 
 struct ActionFailure: Error, CustomStringConvertible {

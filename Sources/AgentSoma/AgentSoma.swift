@@ -136,28 +136,46 @@ struct Host: ParsableCommand {
     mutating func run() throws { try runHost(directory: URL(fileURLWithPath: directory, isDirectory: true)) }
 }
 
+struct ScreenGuardOptions: ParsableArguments {
+    @Option(help: "Maximum changed screen-grid fraction (0...1); default 0.01. Not a confidence score.") var maxScreenChange = 0.01
+    @Option(help: "Maximum changed protected-region fraction (0...max-screen-change); default 0.") var maxRegionChange = 0.0
+    @Option(help: "Additional element reference to protect, repeat up to three times; same observation as the action.") var protect: [String] = []
+
+    var fields: [String: Any] { ["maxScreenChange": maxScreenChange, "maxRegionChange": maxRegionChange, "protect": protect] }
+}
+
 struct Tap: ParsableCommand {
     static let configuration = CommandConfiguration(abstract: "Tap a current element, or a point in a current observation.")
     @OptionGroup var options: SessionOptions
+    @OptionGroup var screenGuard: ScreenGuardOptions
     @Argument(help: "Element reference; use an observation ID with --x and --y.") var reference: String
     @Option(help: "Horizontal screen point coordinate.") var x: Double?
     @Option(help: "Vertical screen point coordinate.") var y: Double?
     mutating func run() throws {
         let session = try options.requiredSession()
-        var fields: [String: Any] = ["reference": reference]
+        var fields = screenGuard.fields
+        fields["reference"] = reference
         fields["x"] = x; fields["y"] = y
         try output { try SessionClient.call(session: session, operation: "tap", fields: fields) }
     }
 }
 
 struct Swipe: ParsableCommand {
-    static let configuration = CommandConfiguration(abstract: "Swipe within a current element's area.")
+    static let configuration = CommandConfiguration(abstract: "Swipe within a current element, or between observed screen points, after a screen guard.")
     @OptionGroup var options: SessionOptions
-    @Argument(help: "Current element reference, such as o1:e13.") var reference: String
-    @Option(help: "Finger movement: up, down, left or right.") var direction: String
+    @OptionGroup var screenGuard: ScreenGuardOptions
+    @Argument(help: "Element reference with --direction; observation ID with explicit endpoints.") var reference: String
+    @Option(help: "Finger movement within the element: up, down, left or right.") var direction: String?
+    @Option(help: "Start horizontal screen point coordinate.") var fromX: Double?
+    @Option(help: "Start vertical screen point coordinate.") var fromY: Double?
+    @Option(help: "End horizontal screen point coordinate.") var toX: Double?
+    @Option(help: "End vertical screen point coordinate.") var toY: Double?
     mutating func run() throws {
         let session = try options.requiredSession()
-        try output { try SessionClient.call(session: session, operation: "swipe", fields: ["reference": reference, "direction": direction]) }
+        var fields = screenGuard.fields
+        fields["reference"] = reference; fields["direction"] = direction
+        fields["fromX"] = fromX; fields["fromY"] = fromY; fields["toX"] = toX; fields["toY"] = toY
+        try output { try SessionClient.call(session: session, operation: "swipe", fields: fields) }
     }
 }
 

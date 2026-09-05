@@ -51,7 +51,9 @@ Runner 使用仓库内的[独立 Xcode 工程](Runner/AgentSomaRunner.xcodeproj/
 
 `type oN:eN --mode insert --text ...` 保留现有光标，需要输入框已有键盘焦点；需要聚焦时先 tap、再 observe。`--mode replace` 聚焦并替换全部内容，空字符串表示清空，两种模式都不自动提交。文本源也可选 `--stdin < text.txt`，与 `--text` 互斥，按原文读取 UTF-8 至 EOF；仍限制 4096 字节并拒绝末尾换行。`press oN:eN --key return` 使用已有焦点发送独立 Return，完成后重新 observe 核对效果。`swipe oN:eN --direction up` 的方向表示手指移动方向；坐标点击使用 `tap oN --x X --y Y`，单位为屏幕点。
 
-`tap/swipe/type/press` 在全部输入调用结束后自动检测画面稳定：约每 200ms 采样，至少 3 帧的全帧像素 SHA-256 一致且覆盖至少 400ms，才返回 `completed`。结果包含 `execution.inputCompleted`、`stability` 和 `frame.screenshot` 本地路径。5 秒检测预算内未稳定则返回 `unknown` / `frame_stability_timeout`，保留输入事实与最后一帧；调用 agent 先观察，不重发，也不额外猜测“等待 Lark 动画”。当前协议为 `actionVersion=3`，已有旧 Runner 需重新构建。
+`tap/swipe` 在输入前检查 App/弹窗及屏幕上下文，并比较整屏与操作区域的截图指纹；通过后直接执行宿主提供的坐标，不再依赖 identifier/label 唯一性。可用 `--max-screen-change`、`--max-region-change` 设置变化比例阈值，用 `--protect oN:eN` 增加最多三个保护区域。明确端点滑动为 `swipe oN --from-x X --from-y Y --to-x X --to-y Y`。变化超限时返回 `not_dispatched` 并要求重新 observe。参数、算法和启发式限制见 [动作前画面校验](docs/screen-guard.md)。
+
+`tap/swipe/type/press` 在全部输入调用结束后自动检测画面稳定：约每 200ms 采样，至少 3 帧的全帧像素 SHA-256 一致且覆盖至少 400ms，才返回 `completed`。结果包含 `execution.inputCompleted`、`stability` 和 `frame.screenshot` 本地路径。5 秒检测预算内未稳定则返回 `unknown` / `frame_stability_timeout`，保留输入事实与最后一帧；调用 agent 先观察，不重发，也不额外猜测“等待 Lark 动画”。当前协议为 `actionVersion=4`、`observationVersion=2`、`screenGuardVersion=1`，已有旧 Runner 需重新构建。
 
 调用 agent 的命令执行工具若提前返回后台任务 ID（例如 `exec_command` 的 `session_id`），必须保留完整返回对象，并通过对应的续读工具（例如 `write_stdin`）取得原命令的退出码和输出。这个 ID 属于命令执行工具，与 AgentSoma 的设备 `session` 不同。不能只打印 `output` 而丢弃任务 ID，也不能用固定 sleep 加重复 `status` 来猜测原命令是否结束。
 

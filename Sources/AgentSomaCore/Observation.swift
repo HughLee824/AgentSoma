@@ -1,4 +1,5 @@
 import Foundation
+import CoreGraphics
 
 struct AXNode {
     let index: Int
@@ -137,6 +138,7 @@ final class ObservationCache {
         }
         guard let scope = entry.capture.metadata["scope"] as? String, ["app", "appAlert", "systemAlert"].contains(scope),
               !entry.capture.nodes.isEmpty else { throw SomaError("target_context_unknown", "Observe a known app or alert before acting") }
+        if ["tap", "swipe"].contains(action.kind) { return try coordinateTarget(for: action, capture: entry.capture) }
         var index = 0
         if !action.coordinate {
             let node = try resolveCurrent(reference)
@@ -156,6 +158,64 @@ final class ObservationCache {
             index = parent
         }
         return ObservedTarget(context: entry.capture.metadata, path: path)
+    }
+
+    private func coordinateTarget(for action: DeviceAction, capture: CapturedObservation) throws -> ObservedTarget {
+        guard let rawContext = capture.metadata["screenContext"] as? [String: Any],
+              let context = try? JSONDecoder().decode(ScreenContext.self, from: jsonData(rawContext)), context.valid else {
+            throw ActionFailure(code: "target_context_unknown", description: "Observe again with a current Runner before using guarded coordinates",
+                                possiblyExecuted: false, requiresObservation: true)
+        }
+        func visibleRect(_ reference: ObservationReference) throws -> CGRect {
+            let node = try resolveCurrent(reference)
+            guard let raw = node.attributes["frame"] as? [String: Any],
+                  let rect = try? JSONDecoder().decode(ScreenRect.self, from: jsonData(raw)), rect.valid else {
+                throw SomaError("invalid_target_frame", "The captured element has no usable bounds")
+            }
+            let visible = rect.cgRect.intersection(context.scope.cgRect)
+            guard !visible.isNull, visible.width >= 1, visible.height >= 1 else {
+                throw SomaError("target_not_visible", "The captured element is outside the observed scope; no automatic scrolling")
+            }
+            return visible
+        }
+        let start: CGPoint
+        var end: CGPoint?
+        if action.coordinate {
+            if action.kind == "tap" { start = CGPoint(x: action.fields["x"] as! Double, y: action.fields["y"] as! Double) }
+            else {
+                start = CGPoint(x: action.fields["fromX"] as! Double, y: action.fields["fromY"] as! Double)
+                end = CGPoint(x: action.fields["toX"] as! Double, y: action.fields["toY"] as! Double)
+            }
+        } else {
+            guard try resolveCurrent(action.reference).enabled else { throw SomaError("target_disabled", "The observed element is disabled") }
+            let rect = try visibleRect(action.reference)
+            if action.kind == "tap" { start = CGPoint(x: rect.midX, y: rect.midY) }
+            else {
+                let direction = action.fields["direction"] as! String
+                let vertical = ["up", "down"].contains(direction)
+                let low = CGPoint(x: vertical ? rect.midX : rect.minX + rect.width * 0.2,
+                                  y: vertical ? rect.minY + rect.height * 0.2 : rect.midY)
+                let high = CGPoint(x: vertical ? rect.midX : rect.minX + rect.width * 0.8,
+                                   y: vertical ? rect.minY + rect.height * 0.8 : rect.midY)
+                start = ["up", "left"].contains(direction) ? high : low
+                end = ["up", "left"].contains(direction) ? low : high
+            }
+        }
+        guard context.scope.cgRect.contains(start), end.map({ context.scope.cgRect.contains($0) }) ?? true else {
+            throw SomaError("invalid_screen_point", "Gesture coordinates must stay inside the observed app or alert")
+        }
+        var rects = CoordinateGesture.actionRegions(start: start, end: end, screen: context.screen.cgRect)
+        rects += try action.protectedReferences.map { ScreenRect(try visibleRect($0)) }
+        let guardValue: ScreenGuard
+        do { guardValue = try ScreenGuard(png: capture.screenshot, context: context, rects: rects, policy: action.guardPolicy) }
+        catch {
+            throw ActionFailure(code: (error as? ScreenGuard.Failure)?.rawValue ?? "screen_guard_unavailable",
+                                description: "Cannot prepare a screen guard from this observation; observe again",
+                                possiblyExecuted: false, requiresObservation: true)
+        }
+        let gesture = CoordinateGesture(start: start, end: end, screenGuard: guardValue)
+        try gesture.validate(kind: action.kind)
+        return ObservedTarget(context: capture.metadata, path: [], gesture: gesture)
     }
 
     func clear() throws {

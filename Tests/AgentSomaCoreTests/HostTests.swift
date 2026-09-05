@@ -15,6 +15,8 @@ private final class ControlledBackend: SessionBackend {
     private(set) var observeCount = 0
     private(set) var appsCount = 0
     private(set) var actionCount = 0
+    private(set) var inputCount = 0
+    var liveScreen: Data?
     var actionFailure: ActionFailure?
     var blockAction = false
     let actionStarted = DispatchSemaphore(value: 0)
@@ -48,6 +50,14 @@ private final class ControlledBackend: SessionBackend {
         actionStarted.signal()
         if blockAction { _ = releaseAction.wait(timeout: .now() + 5) }
         if let actionFailure { throw actionFailure }
+        if let liveScreen, let gesture = target.gesture {
+            let check = try gesture.screenGuard.check(png: liveScreen, context: gesture.screenGuard.context)
+            if !check.accepted {
+                throw ActionFailure(code: "screen_changed", description: "Screen changed", possiblyExecuted: false,
+                                    requiresObservation: true, result: ["screenGuard": check.result])
+            }
+        }
+        inputCount += 1
         return ["kind": action.kind]
     }
 }
@@ -362,6 +372,28 @@ final class HostTests: XCTestCase {
         let retry = try call(paths, session: session, op: "tap", fields: ["reference": "o1:e11"])
         XCTAssertEqual(retry["outcome"] as? String, "not_dispatched")
         XCTAssertEqual(backend.actionCount, 1)
+        _ = try call(paths, session: session, op: "disconnect")
+        wait(for: [finished], timeout: 3)
+    }
+
+    func testScreenGuardRejectionInvalidatesRefsBeforeAnyInputAndDoesNotRetry() throws {
+        let backend = ControlledBackend()
+        backend.liveScreen = try screenPNG(patches: [(CGRect(x: 0, y: 0, width: 390, height: 844), [0, 0, 0])])
+        let (paths, session, finished) = try host(timeout: 5, backend: backend)
+        _ = try call(paths, session: session, op: "observe")
+        let fields: [String: Any] = ["reference": "o1", "x": 200, "y": 600]
+        let rejected = try call(paths, session: session, op: "tap", fields: fields)
+        XCTAssertEqual(rejected["outcome"] as? String, "not_dispatched")
+        XCTAssertEqual(rejected["requiresObservation"] as? Bool, true)
+        XCTAssertEqual((rejected["error"] as? [String: Any])?["code"] as? String, "screen_changed")
+        XCTAssertEqual(backend.inputCount, 0)
+        let again = try call(paths, session: session, op: "tap", fields: fields)
+        XCTAssertEqual((again["error"] as? [String: Any])?["code"] as? String, "stale_reference")
+        XCTAssertEqual(backend.actionCount, 1)
+        backend.liveScreen = try screenPNG()
+        _ = try call(paths, session: session, op: "observe")
+        XCTAssertEqual(try call(paths, session: session, op: "tap", fields: ["reference": "o2", "x": 200, "y": 600])["outcome"] as? String, "completed")
+        XCTAssertEqual(backend.inputCount, 1)
         _ = try call(paths, session: session, op: "disconnect")
         wait(for: [finished], timeout: 3)
     }

@@ -1,6 +1,6 @@
 # 设备动作与引用校验
 
-当前提供按引用的点击、滑动、光标插入、整段替换和独立 Return，以及基于当前观察的点坐标点击；文本可从参数或 stdin 读取。用户或调用 agent 负责选择动作并观察结果；AgentSoma 不解释自然语言任务。
+当前提供按引用或明确坐标的画面校验点击/滑动，以及按输入框引用的光标插入、整段替换和独立 Return；文本可从参数或 stdin 读取。用户或调用 agent 负责选择动作并观察结果；AgentSoma 不解释自然语言任务。
 
 ## CLI 形式
 
@@ -15,10 +15,12 @@ agentsoma --session "$SESSION" type o8:e8 --mode replace --text ''
 agentsoma --session "$SESSION" type o9:e8 --mode replace --stdin < text.txt
 agentsoma --session "$SESSION" press o10:e8 --key return
 agentsoma --session "$SESSION" tap o11 --x 100 --y 200
+agentsoma --session "$SESSION" swipe o12 --from-x 100 --from-y 420 --to-x 100 --to-y 380
+agentsoma --session "$SESSION" tap o13:e10 --protect o13:e20
 ```
 
 - tap 元素用完整 `oN:eN`。点坐标形式用 `oN --x --y`，单位为屏幕点；不是 PNG 像素，不能同时指定元素引用。点击范围限制在当前已确认的 App 或弹窗内。
-- swipe 的 up/down/left/right 描述手指移动方向，调用 XCTest 的对应手势，当前没有自定义速度或距离参数。
+- swipe 的 up/down/left/right 描述手指移动方向；宿主根据可见 frame 的 20%/80% 位置生成端点。明确端点形式可控制手指移动距离，速度由 XCTest 的坐标拖动原语决定。tap/swipe 先校验画面再执行坐标，不依赖 identifier/label 唯一性；阈值、附加保护区域、限制见 [动作前画面校验](screen-guard.md)。
 - insert 直接向指定输入框发送文字，保留已有光标位置，不额外点击字段。它需要现有键盘焦点；需要聚焦时由 agent 先 tap、再 observe。公开 hasFocus 在本设备中不反映键盘焦点，不能据此预检。
 - replace 聚焦输入框后发送 Command-A，非空文本直接覆盖选区；空文本通过 `typeText(XCUIKeyboardKey.delete.rawValue)` 删除选区。没有按 AX value 长度连续退格，也没有自动 Return 或点击提交。
 - 文本上限仍是 4096 UTF-8 字节，拒绝换行及控制键；insert 不接受空字符串，replace 空字符串表示清空。
@@ -27,16 +29,16 @@ agentsoma --session "$SESSION" tap o11 --x 100 --y 200
 
 ## 宿主与 Runner 的职责
 
-宿主解析参数、验证会话与当前引用，从原快照构造目标路径。路径包含来源节点和祖先的类型、identifier、label、value、enabled、frame，以及每层在父节点内的位置；不向 Runner 发送面向 agent 的观察 ID 或短引用。
+宿主解析参数、验证会话与当前引用。tap/swipe 从原快照构造坐标与分区截图指纹；type/press 构造目标路径，包含来源节点和祖先的类型、identifier、label、value、enabled、frame，以及每层在父节点内的位置。不向 Runner 发送面向 agent 的观察 ID 或短引用。
 
 这些检查与动作在同一个宿主串行队列执行。两个并发 CLI 命令即使使用同一份当前引用，第一个动作完成后，第二个在解析目标时仍会因引用失效而被拒绝。
 
 薄 Runner 在发送输入前检查：
 
 1. 对应的目标 App 身份与前台状态；SpringBoard Alert 和 App 内 Alert 的存在与数量必须符合观察时的范围。
-2. 当前 AX 中的目标路径和每层属性；frame 允许最多 0.5 点的浮点变化。位置、名称或值等变化会要求重新观察，不盲用旧序号或旧坐标。
-3. 元素按 type、identifier、label 分别精确匹配并且唯一，不使用早期 matching(identifier:) 同时匹配 identifier/label 的含混行为。同名同标识按钮不会通过选择第一个来消除歧义。
-4. 目标仍启用且 isHittable。输入目标必须是 text field、secure text field、text view 或 search field。
+2. tap/swipe 检查屏幕/范围/方向/键盘上下文，并重新截图。整屏和各保护区域变化在阈值内才执行坐标；不做 AX 目标路径重采样或名称查找。近似通过不保证业务状态未改变。
+3. type/press 仍检查当前 AX 中的目标路径和每层属性；frame 允许最多 0.5 点的浮点变化。随后按 type、identifier、label 精确匹配且要求唯一，不通过选择第一个来消除歧义。
+4. type/press 目标仍须启用且 isHittable，并为 text field、secure text field、text view 或 search field。坐标动作不保留这项 live 目标语义保证。
 
 App 内唯一 Alert 现在单独作为 `scope=appAlert` 采集，SpringBoard Alert 使用 `scope=systemAlert`。原来没有弹窗的观察不会被用于点击后来出现的弹窗。
 
@@ -47,7 +49,7 @@ Runner 没有跨请求观察缓存、短引用、续期计时或任务策略。�
 进入会话的动作结果均为单行 JSON，并保留请求 ID 和 session。stdin 的读取、编码或字节上限错误在 CLI 创建请求前返回 `ok=false`、`outcome=not_dispatched` 和 error，此时没有会话请求关联字段。文本源选择等语法错误继续由 ArgumentParser 输出到 stderr 并非零退出。
 
 ```json
-{"id":"example-request","session":"example-session","ok":true,"outcome":"completed","result":{"kind":"tap","execution":{"started":true,"inputCompleted":true,"completed":true},"stability":{"stable":true,"samples":4,"consecutiveFrames":4,"stableForMs":563,"elapsedMs":750,"hash":"example-sha256","algorithm":"sha256-rgba8-srgb","sampleIntervalMs":200,"requiredStableMs":400,"timeoutMs":5000},"frame":{"screenshot":"/private/tmp/agentsoma-501/example-session/observations/action/screen.png","hash":"example-sha256","capturedAt":1788608247.676,"width":1170,"height":2532},"runnerMs":3634}}
+{"id":"example-request","session":"example-session","ok":true,"outcome":"completed","result":{"kind":"tap","execution":{"started":true,"inputCompleted":true,"completed":true},"screenGuard":{"algorithm":"srgb-grid-v1","accepted":true,"screenChange":0,"regionChanges":[0],"maxScreenChange":0.01,"maxRegionChange":0,"pixelTolerance":8},"stability":{"stable":true,"samples":4,"consecutiveFrames":4,"stableForMs":563,"elapsedMs":750,"hash":"example-sha256","algorithm":"sha256-rgba8-srgb","sampleIntervalMs":200,"requiredStableMs":400,"timeoutMs":5000},"frame":{"screenshot":"/private/tmp/agentsoma-501/example-session/observations/action/screen.png","hash":"example-sha256","capturedAt":1788608247.676,"width":1170,"height":2532},"runnerMs":3634}}
 ```
 
 | outcome | 判定 | 引用处理 |
@@ -74,7 +76,7 @@ XCTest 的命令错误经 Runner 转成响应；不再把已经返回给调用�
 
 原始输入探针和修正经过见 [输入原语记录](../spikes/ios-xctest/INPUT.md)。最初“全选、Delete、再输入”的探针没有单独断言清空，非空输入覆盖选区掩盖了 `typeKey(.delete)` 在本设备上不删除选区的问题。现已改为文本删除字符，并在固定测试中加入删除后的即时断言。
 
-当前使用 build-runner 构建并签名的 Runner。帧稳定契约将设备动作协议提升为 `actionVersion=3`、`frameStabilityVersion=1`；旧产物连接时返回 `runner_needs_rebuild`，需重新 build-runner 并将新路径用于 connect。第 5 阶段已实现设备/App 发现并移除 open 的 Fixture/Calculator 范围限制，补充了 Settings 导航点击证据，见 [完整调用验收](discovery.md)。下方保留第 4 阶段的原始动作验收统计。支持证据来自当前 iOS 26.6 的受控 Fixture 和本次 Lark 验证，不代表所有输入法、自定义编辑器或 App 已完成验证。执行前检查也不构成与 App 自行变化原子隔离的事务。
+当前使用 build-runner 构建并签名的 Runner。画面校验坐标动作使用 `actionVersion=4`、`observationVersion=2`、`screenGuardVersion=1`，保持 `frameStabilityVersion=1`；旧产物连接时返回 `runner_needs_rebuild`，需重新 build-runner 并将新路径用于 connect。第 5 阶段已实现设备/App 发现并移除 open 的 Fixture/Calculator 范围限制，补充了 Settings 导航点击证据，见 [完整调用验收](discovery.md)。下方保留此前 AX 定位和帧稳定阶段的原始验收统计，不代表新增坐标校验已完成相同的真机验收。新契约与证据边界见 [画面校验文档](screen-guard.md)。执行前检查不构成与 App 自行变化原子隔离的事务。
 
 ## 验收结果
 

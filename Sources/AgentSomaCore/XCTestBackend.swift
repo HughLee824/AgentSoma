@@ -72,11 +72,7 @@ final class XCTestBackend: SessionBackend {
             // Only startup health checks retry. No UI command is sent until readiness succeeds.
             if let response = try? request("ping", timeout: 1), response["ok"] as? Bool == true,
                let result = response["result"] as? [String: Any] {
-                guard result["lifecycleOwner"] as? String == "host", result["observationVersion"] as? Int == 1,
-                      result["actionVersion"] as? Int == 3, result["launchVersion"] as? Int == 1,
-                      result["frameStabilityVersion"] as? Int == 1 else {
-                    throw SomaError("runner_needs_rebuild", "Run build-runner for frame-stable actions, then connect with its new .xctestrun")
-                }
+                try Self.validateCapabilities(result)
                 guard result["applicationStateTimeoutSupported"] as? Bool == true else {
                     throw SomaError("unsupported_xctest_runtime", "This XCTest runtime cannot bound application-state waits; see \(logURL.path)")
                 }
@@ -137,14 +133,36 @@ final class XCTestBackend: SessionBackend {
     }
 
     func perform(_ action: DeviceAction, target: ObservedTarget) throws -> [String: Any] {
-        var fields = action.fields
-        fields["target"] = ["scope": target.context["scope"] ?? NSNull(),
-            "bundleId": target.context["targetBundleId"] ?? NSNull(), "path": target.path]
-        guard try jsonData(fields).count <= 60_000 else {
-            throw SomaError("target_too_large", "Target attributes exceed the Runner request budget")
+        let response = try request("act", fields: Self.actionFields(action, target: target))
+        return try ActionReply.decode(XCTestCapture.actionResponse(response, directory: paths.directory, expectedGuard: target.gesture?.screenGuard))
+    }
+
+    static func validateCapabilities(_ result: [String: Any]) throws {
+        guard result["lifecycleOwner"] as? String == "host", result["observationVersion"] as? Int == 2,
+              result["actionVersion"] as? Int == 4, result["launchVersion"] as? Int == 1,
+              result["frameStabilityVersion"] as? Int == 1, result["screenGuardVersion"] as? Int == 1 else {
+            throw SomaError("runner_needs_rebuild", "Run build-runner for guarded coordinate actions, then connect with its new .xctestrun")
         }
-        let response = try request("act", fields: fields)
-        return try ActionReply.decode(XCTestCapture.actionResponse(response, directory: paths.directory))
+    }
+
+    static func actionFields(_ action: DeviceAction, target: ObservedTarget) throws -> [String: Any] {
+        var fields: [String: Any]
+        if ["tap", "swipe"].contains(action.kind) {
+            guard let gesture = target.gesture else { throw SomaError("missing_screen_guard", "Guarded coordinates are required") }
+            try gesture.validate(kind: action.kind)
+            fields = ["kind": action.kind, "gesture": try jsonObject(JSONEncoder().encode(gesture))]
+        } else { fields = action.fields }
+        fields["target"] = ["scope": target.context["scope"] ?? NSNull(),
+            "bundleId": target.context["targetBundleId"] ?? NSNull()]
+        if target.gesture == nil {
+            var expected = fields["target"] as! [String: Any]
+            expected["path"] = target.path
+            fields["target"] = expected
+        }
+        guard try jsonData(fields).count <= 60_000 else {
+            throw SomaError("target_too_large", "Target or screen guard exceeds the Runner request budget")
+        }
+        return fields
     }
 
     func observe() throws -> CapturedObservation {

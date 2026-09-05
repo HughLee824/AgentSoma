@@ -4,11 +4,12 @@ import ImageIO
 // Decode the Runner's selected snapshot attributes without parsing debugDescription.
 enum XCTestCapture {
     // Keep only the latest action frame; the observation cache clears this directory on disconnect.
-    static func actionResponse(_ response: [String: Any], directory: URL) throws -> [String: Any] {
+    static func actionResponse(_ response: [String: Any], directory: URL, expectedGuard: ScreenGuard? = nil) throws -> [String: Any] {
         var result = response["result"] as? [String: Any] ?? [:]
         result["execution"] = response["execution"]
         result["stability"] = response["stability"]
         result["runnerMs"] = response["runnerMs"]
+        result["screenGuard"] = response["screenGuard"]
         let execution = response["execution"] as? [String: Any]
         let stability = response["stability"] as? [String: Any]
         do {
@@ -30,6 +31,17 @@ enum XCTestCapture {
                 try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
                 result["frame"] = ["screenshot": file.path, "hash": fingerprint.hash, "capturedAt": capturedAt,
                                    "width": fingerprint.width, "height": fingerprint.height]
+            }
+            if response["ok"] as? Bool == true, let expectedGuard {
+                guard let evidence = response["screenGuard"] as? [String: Any],
+                      evidence["accepted"] as? Bool == true, evidence["algorithm"] as? String == ScreenGuard.algorithm,
+                      evidence["maxScreenChange"] as? Double == expectedGuard.policy.maxScreenChange,
+                      evidence["maxRegionChange"] as? Double == expectedGuard.policy.maxRegionChange,
+                      let global = evidence["screenChange"] as? Double, global.isFinite, (0...expectedGuard.policy.maxScreenChange).contains(global),
+                      let regions = evidence["regionChanges"] as? [Double], regions.count == expectedGuard.regions.count,
+                      regions.allSatisfy({ $0.isFinite && (0...expectedGuard.policy.maxRegionChange).contains($0) }) else {
+                    throw SomaError("missing_screen_guard_facts", "Runner did not confirm the requested screen guard; observe before deciding what to do next")
+                }
             }
             if response["ok"] as? Bool == true {
                 guard execution?["inputCompleted"] as? Bool == true, stability?["stable"] as? Bool == true,
@@ -69,6 +81,7 @@ enum XCTestCapture {
         for key in ["snapshotStartedAt", "snapshotFinishedAt", "screenshotCapturedAt"] {
             metadata[key] = result[key] as? Double ?? NSNull()
         }
+        metadata["screenContext"] = result["screenContext"] as? [String: Any] ?? NSNull()
         let available = result["axStatus"] as? String == "available"
         metadata["axStatus"] = available ? "available" : "unavailable"
         metadata["sourceTruncated"] = result["truncated"] as? Bool ?? NSNull()

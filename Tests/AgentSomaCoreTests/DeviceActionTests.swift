@@ -36,6 +36,27 @@ final class DeviceActionTests: XCTestCase {
         }
     }
 
+    func testGuardPoliciesAndCoordinateSwipesRejectInvalidOrMixedArguments() throws {
+        let swipe: [String: Any] = ["reference": "o1", "fromX": 1, "fromY": 100, "toX": 1, "toY": 20]
+        XCTAssertNoThrow(try DeviceAction(operation: "swipe", request: swipe))
+        for (key, value): (String, Any) in [("direction", "up"), ("fromX", true), ("toY", Double.nan),
+            ("x", 2), ("reference", "o1:e1"), ("fromY", "100")] {
+            var invalid = swipe
+            invalid[key] = value
+            XCTAssertThrowsError(try DeviceAction(operation: "swipe", request: invalid))
+        }
+        var missing = swipe
+        missing.removeValue(forKey: "toX")
+        XCTAssertThrowsError(try DeviceAction(operation: "swipe", request: missing))
+        for options: [String: Any] in [["maxScreenChange": -1], ["maxScreenChange": 2], ["maxRegionChange": 0.1],
+            ["maxScreenChange": true], ["maxRegionChange": Double.infinity], ["protect": ["o2:e1"]],
+            ["protect": ["o1"]], ["protect": ["o1:e1", "o1:e1", "o1:e1", "o1:e1"]], ["protect": "o1:e1"]] {
+            var request: [String: Any] = ["reference": "o1:e1"]
+            request.merge(options) { _, new in new }
+            XCTAssertThrowsError(try DeviceAction(operation: "tap", request: request))
+        }
+    }
+
     func testExecutionFactsDistinguishRejectionUnknownAndMalformedSuccess() throws {
         let done: [String: Any] = ["ok": true, "execution": ["started": true, "completed": true], "result": ["kind": "tap"]]
         XCTAssertEqual(try ActionReply.decode(done)["kind"] as? String, "tap")

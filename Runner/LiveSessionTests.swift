@@ -124,6 +124,7 @@ final class LiveSessionTests: XCTestCase {
     private let stateTimeout = XCTestStateTimeout()
     private var frameStability: FrameStability?
     private var actionFrame: (png: Data, capturedAt: Double, fingerprint: FrameFingerprint)?
+    private var screenGuardResult: [String: Any]?
 
     override func record(_ issue: XCTIssue) {
         if handlingCommand { commandIssues.append(issue.compactDescription) }
@@ -156,6 +157,7 @@ final class LiveSessionTests: XCTestCase {
             inputCompleted = false
             frameStability = nil
             actionFrame = nil
+            screenGuardResult = nil
             let began = ProcessInfo.processInfo.systemUptime
             let command = request.body
             var response: [String: Any] = [
@@ -184,6 +186,7 @@ final class LiveSessionTests: XCTestCase {
                 response["execution"] = ["started": executionStarted, "inputCompleted": inputCompleted,
                                          "completed": response["ok"] as? Bool == true]
                 response["stability"] = frameStability?.result
+                response["screenGuard"] = screenGuardResult
                 if let frame = actionFrame {
                     response["frame"] = ["screenshotBase64": frame.png.base64EncodedString(),
                         "capturedAt": frame.capturedAt, "hash": frame.fingerprint.hash,
@@ -204,8 +207,8 @@ final class LiveSessionTests: XCTestCase {
         if op == "ping" {
             let hostManaged = ProcessInfo.processInfo.environment["AGENTSOMA_HOST_MANAGED"] == "1"
             return ["protocol": "agentsoma-spike-jsonl-v1", "lifecycleOwner": hostManaged ? "host" : "spike",
-                    "lifetimeLimitSeconds": hostManaged ? NSNull() : 900, "observationVersion": 1,
-                    "actionVersion": 3, "launchVersion": 1, "frameStabilityVersion": 1,
+                    "lifetimeLimitSeconds": hostManaged ? NSNull() : 900, "observationVersion": 2,
+                    "actionVersion": 4, "launchVersion": 1, "frameStabilityVersion": 1, "screenGuardVersion": 1,
                     "applicationStateTimeoutSupported": stateTimeout != nil]
         }
         if op == "shutdown" { return ["stopped": true] }
@@ -287,15 +290,12 @@ final class LiveSessionTests: XCTestCase {
     private func perform(_ command: [String: Any]) throws -> [String: Any] {
         guard let kind = command["kind"] as? String, ["tap", "swipe", "type", "press"].contains(kind),
               let expected = command["target"] as? [String: Any],
-              let scope = expected["scope"] as? String,
-              let path = expected["path"] as? [[String: Any]], !path.isEmpty, path.count <= 200 else {
+              let scope = expected["scope"] as? String else {
             throw CommandError("invalid_action")
         }
-        let direction = command["direction"] as? String
         let mode = command["mode"] as? String
         let text = command["text"] as? String
         if kind == "press", command["key"] as? String != "return" { throw CommandError("invalid_key") }
-        if kind == "swipe", !["up", "down", "left", "right"].contains(direction ?? "") { throw CommandError("invalid_direction") }
         if kind == "type" {
             guard ["insert", "replace"].contains(mode ?? ""), let text, text.utf8.count <= 4096,
                   mode == "replace" || !text.isEmpty,
@@ -322,6 +322,8 @@ final class LiveSessionTests: XCTestCase {
             else if scope == "app", alerts.count == 0 { root = app }
             else { throw CommandError("app_alert_changed", requiresObservation: true) }
         }
+        if ["tap", "swipe"].contains(kind) { return try performGesture(command, kind: kind, app: app, root: root) }
+        guard let path = expected["path"] as? [[String: Any]], !path.isEmpty, path.count <= 200 else { throw CommandError("invalid_action") }
         var snapshot = try root.snapshot()
         for (index, expectedNode) in path.enumerated() {
             if index > 0 {
@@ -331,13 +333,6 @@ final class LiveSessionTests: XCTestCase {
                 snapshot = snapshot.children[child]
             }
             guard matches(snapshot, expected: expectedNode) else { throw CommandError("target_changed", requiresObservation: true) }
-        }
-        if command["x"] != nil || command["y"] != nil {
-            guard kind == "tap", path.count == 1, let x = command["x"] as? Double, let y = command["y"] as? Double,
-                  x.isFinite, y.isFinite, root.frame.contains(CGPoint(x: x, y: y)) else { throw CommandError("invalid_screen_point") }
-            let frame = app.frame
-            try event { app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: x - frame.minX, dy: y - frame.minY)).tap() }
-            return ["coordinateSpace": "screen_points", "x": x, "y": y]
         }
         let target: XCUIElement
         if path.count == 1 { target = root }
@@ -355,16 +350,6 @@ final class LiveSessionTests: XCTestCase {
             throw CommandError("not_text_input")
         }
         switch kind {
-        case "tap": try event { target.tap() }
-        case "swipe":
-            try event {
-                switch direction {
-                case "up": target.swipeUp()
-                case "down": target.swipeDown()
-                case "left": target.swipeLeft()
-                default: target.swipeRight()
-                }
-            }
         case "type":
             if mode == "replace" {
                 try event { target.tap() }
@@ -378,6 +363,55 @@ final class LiveSessionTests: XCTestCase {
         default: break
         }
         return ["kind": kind]
+    }
+
+    @MainActor
+    private func screenContext(app: XCUIApplication, root: XCUIElement) -> ScreenContext {
+        ScreenContext(screen: ScreenRect(app.frame), scope: ScreenRect(root.frame),
+                      orientation: XCUIDevice.shared.orientation.rawValue, keyboardCount: app.keyboards.count)
+    }
+
+    @MainActor
+    private func performGesture(_ command: [String: Any], kind: String, app: XCUIApplication, root: XCUIElement) throws -> [String: Any] {
+        let gesture: CoordinateGesture
+        let context: ScreenContext
+        do {
+            guard let raw = command["gesture"] as? [String: Any] else { throw ScreenGuard.Failure.invalidGuard }
+            gesture = try JSONDecoder().decode(CoordinateGesture.self, from: JSONSerialization.data(withJSONObject: raw))
+            try gesture.validate(kind: kind)
+            context = screenContext(app: app, root: root)
+            guard gesture.screenGuard.context.matches(context), context.scope.cgRect.contains(gesture.start),
+                  gesture.end.map({ context.scope.cgRect.contains($0) }) ?? true else { throw ScreenGuard.Failure.contextChanged }
+            let screenshot = XCUIScreen.main.screenshot()
+            let capturedAt = Date().timeIntervalSince1970
+            try checkIssues()
+            let check = try gesture.screenGuard.check(png: screenshot.pngRepresentation, context: context)
+            screenGuardResult = check.result
+            screenGuardResult?["capturedAt"] = capturedAt
+            screenGuardResult?["regions"] = try gesture.screenGuard.regions.map {
+                try JSONSerialization.jsonObject(with: JSONEncoder().encode($0.rect))
+            }
+        } catch {
+            let code = (error as? ScreenGuard.Failure)?.rawValue ?? "screen_guard_unavailable"
+            screenGuardResult = ["accepted": false, "reason": code]
+            throw CommandError(code, requiresObservation: true, message: "Screen guard could not validate the old observation; observe again")
+        }
+        guard screenGuardResult?["accepted"] as? Bool == true else {
+            throw CommandError("screen_changed", requiresObservation: true,
+                               message: "Screen or protected region changed beyond its threshold; observe again before choosing an action")
+        }
+        func coordinate(_ point: CGPoint) -> XCUICoordinate {
+            app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: point.x - context.screen.x, dy: point.y - context.screen.y))
+        }
+        let start = coordinate(gesture.start)
+        if let end = gesture.end {
+            let destination = coordinate(end)
+            try event { start.press(forDuration: 0, thenDragTo: destination) }
+            return ["kind": kind, "coordinateSpace": "screen_points", "fromX": gesture.start.x,
+                    "fromY": gesture.start.y, "toX": end.x, "toY": end.y]
+        }
+        try event { start.tap() }
+        return ["kind": kind, "coordinateSpace": "screen_points", "x": gesture.start.x, "y": gesture.start.y]
     }
 
     private func matches(_ node: XCUIElementSnapshot, expected: [String: Any]) -> Bool {
@@ -413,8 +447,12 @@ final class LiveSessionTests: XCTestCase {
             catch { axError = String(describing: error) }
         }
         let snapshotFinished = Date().timeIntervalSince1970
-        let screenshot = XCUIScreen.main.screenshot()
         let frame = app?.frame
+        var context: Any = NSNull()
+        if let app, let root,
+           let encoded = try? JSONEncoder().encode(screenContext(app: app, root: root)),
+           let object = try? JSONSerialization.jsonObject(with: encoded) { context = object }
+        let screenshot = XCUIScreen.main.screenshot()
         return [
             "bundleId": scope == "systemAlert" ? "com.apple.springboard" : (app != nil ? currentBundleID as Any? ?? NSNull() : NSNull()),
             "targetBundleId": currentBundleID as Any? ?? NSNull(), "scope": scope,
@@ -422,6 +460,7 @@ final class LiveSessionTests: XCTestCase {
             "appState": app.map { $0.state.rawValue as Any } ?? NSNull(),
             "screenFrame": frame.map { ["x": $0.minX, "y": $0.minY, "width": $0.width, "height": $0.height] as Any } ?? NSNull(),
             "coordinateSpace": "screen_points", "nodes": nodes, "truncated": truncated,
+            "screenContext": context,
             "axStatus": nodes.isEmpty ? "unavailable" : "available", "axError": axError as Any? ?? NSNull(),
             "snapshotStartedAt": snapshotTime, "snapshotFinishedAt": snapshotFinished,
             "screenshotCapturedAt": Date().timeIntervalSince1970,

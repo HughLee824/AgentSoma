@@ -2,15 +2,16 @@ import XCTest
 import Foundation
 @testable import AgentSomaCore
 
-// Recorded AX only; a synthetic one-pixel PNG keeps unit tests independent of ignored device artifacts.
+// Recorded AX with a synthetic full-screen PNG, independent of ignored device artifacts.
 func observationFixture(_ name: String = "spike-observe.json") throws -> CapturedObservation {
     let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
     let response = try jsonObject(Data(contentsOf: root.appendingPathComponent("docs/examples/observe/\(name)")))
     var result = response["result"] as! [String: Any]
-    result["screenshotBase64"] = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1kAAAAASUVORK5CYII="
+    result["screenshotBase64"] = try screenPNG().base64EncodedString()
     result["axStatus"] = "available"
     result["snapshotFinishedAt"] = result["screenshotCapturedAt"]
     result["screenFrame"] = ["x": 0, "y": 0, "width": 390, "height": 844]
+    result["screenContext"] = try jsonObject(JSONEncoder().encode(screenTestContext()))
     if result["scope"] as? String == "app" { result["foregroundBundleId"] = result["bundleId"] }
     return try XCTestCapture.decode(result)
 }

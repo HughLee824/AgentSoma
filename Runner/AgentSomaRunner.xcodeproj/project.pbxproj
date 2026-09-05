@@ -4,6 +4,16 @@
 	classes = {};
 	objectVersion = 56;
 	objects = {
+		A0000000000000000000000F /* ScreenGuard.swift in Sources */ = {
+			isa = PBXBuildFile;
+			fileRef = A00000000000000000000010;
+		};
+		A00000000000000000000010 /* ScreenGuard.swift */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.swift;
+			path = ../Sources/AgentSomaCore/ScreenGuard.swift;
+			sourceTree = "<group>";
+		};
 		A0000000000000000000000D /* FrameStability.swift in Sources */ = {
 			isa = PBXBuildFile;
 			fileRef = A0000000000000000000000E;
@@ -33,7 +43,7 @@
 		};
 		A00000000000000000000004 = {
 			isa = PBXGroup;
-			children = (A00000000000000000000002, A0000000000000000000000E, A00000000000000000000005);
+			children = (A00000000000000000000002, A0000000000000000000000E, A00000000000000000000010, A00000000000000000000005);
 			sourceTree = "<group>";
 		};
 		A00000000000000000000005 /* Products */ = {
@@ -72,7 +82,7 @@
 		A00000000000000000000008 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
-			files = (A00000000000000000000001, A0000000000000000000000D);
+			files = (A00000000000000000000001, A0000000000000000000000D, A0000000000000000000000F);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		A00000000000000000000009 /* Debug target */ = {

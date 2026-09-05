@@ -47,7 +47,7 @@
 | 动作 | 参数语义 |
 | --- | --- |
 | `tap` | 点击一个点，或一个明确的元素目标。 |
-| `swipe` | 在指定元素区域按明确方向滑动。 |
+| `swipe` | 在指定元素区域按明确方向，或在观察中的明确端点之间滑动；输入前进行画面校验。 |
 | `type_text` | 向指定输入目标执行明确的插入或替换；不自动发送提交动作。 |
 | `press` | 向有键盘焦点的输入框发送独立按键；当前仅支持 Return。 |
 
@@ -68,7 +68,7 @@ CLI 已确认由 agent 显式填写 `--mode`。以下 JSON 仅描述动作语义
 
 两种输入都沿用已确认的引用失效规则：动作发出后旧引用失效，后续按引用点击提交按钮前需要重新观察。
 
-元素目标现在使用分开的 `identifier`、`label`、`type` 条件共同精确匹配，并核对源路径、值、状态和位置。没有匹配或存在多个匹配时返回错误，交由 agent 重新观察或使用明确坐标；不使用实验代码中 identifier 同时匹配 label 的行为。
+type/press 的输入目标继续使用分开的 `identifier`、`label`、`type` 条件共同精确匹配，并核对源路径、值、状态和位置。tap/swipe 则由宿主将来源 frame 解析为坐标，Runner 在上下文和分区画面校验通过后执行，不再用名称查询目标。近似通过不保证目标身份或业务状态未变化；详见 [画面校验契约](screen-guard.md)。
 
 已确认采用短元素引用的方向，让 agent 无需重复填写长 identifier 或坐标。引用绑定观察与来源节点，不是现有 index，也不自动解决匹配歧义或保证目标仍存在；执行前必须能确认目标对应关系，不能确认则拒绝。宿主引用生成、解析、失效，以及后端实时目标定位均已接入动作并通过验收；发现目标变化会要求重新观察。
 
@@ -166,7 +166,7 @@ agentsoma --session s1 disconnect
 | `agentsoma --session s1 press o7:e5 --key return` | 使用已有焦点发送独立 Return，随后 observe 核对 App 效果。 |
 | `agentsoma connect --device <device-id> --idle-timeout 60m` | 为建立的会话调整空闲回收时长；未指定时采用已确认的 30 分钟默认值。 |
 
-`observe` 的默认输出继续采用紧凑文本和图片文件路径；动作输出保留请求关联与 completed / not_dispatched / unknown 语义。截图进入视觉上下文需要 agent 读取图片。坐标现使用 `tap oN --x X --y Y`（屏幕点），滑动使用 `swipe oN:eN --direction up|down|left|right`；stdin 沿用文本预算和无自动提交语义，独立按键当前限 Return；具体调用见 [动作接口](actions.md)。
+`observe` 的默认输出继续采用紧凑文本和图片文件路径；动作输出保留请求关联与 completed / not_dispatched / unknown 语义。截图进入视觉上下文需要 agent 读取图片。坐标现使用 `tap oN --x X --y Y`（屏幕点）；滑动使用 `swipe oN:eN --direction up|down|left|right` 或 `swipe oN --from-x X --from-y Y --to-x X --to-y Y`。stdin 沿用文本预算和无自动提交语义，独立按键当前限 Return；具体调用见 [动作接口](actions.md)。
 
 ## 证据与后续实现的区别
 
