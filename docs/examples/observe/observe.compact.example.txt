@@ -1,0 +1,14 @@
+observation=o4 app="AgentSoma Probe" screen=390x844pt ax=available source_truncated=false
+
+text "Extended probes"
+[e1] button "Done"
+[e2] button "Show dialog"
+text "Not confirmed"
+[e3] button "Request notification permission"
+text "Notifications: notDetermined"
+[e4] web_view
+  text "Local web probe"
+  [e5] text_field "Web input" ax_value="Web text"
+  [e6] button "Web increment"
+  text "Web count: 0"
+  text "Web value:"

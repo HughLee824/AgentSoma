@@ -1,0 +1,49 @@
+Attributes: Application, 0x15d7f6580, pid: 8173, label: 'AgentSoma Probe'
+Element subtree:
+ →Application, 0x15d7f6580, pid: 8173, label: 'AgentSoma Probe'
+    Window (Main), 0x15d7f66c0, {{0.0, 0.0}, {390.0, 844.0}}
+      Other, 0x15d7f57c0, {{0.0, 0.0}, {390.0, 844.0}}
+        Other, 0x15d7f5900, {{0.0, 0.0}, {390.0, 844.0}}
+          Other, 0x15d7f5a40, {{0.0, 0.0}, {390.0, 844.0}}
+            Other, 0x15d7f5b80, {{0.0, 0.0}, {390.0, 844.0}}
+              StaticText, 0x15d7f5cc0, {{85.5, 63.0}, {219.0, 33.7}}, label: 'AgentSoma Probe'
+              TextField, 0x15d7f7700, {{16.0, 112.7}, {358.0, 34.0}}, identifier: 'input', placeholderValue: 'Test text', value: AgentSoma hello 你好
+              Button, 0x15d7f75c0, {{128.0, 162.7}, {134.3, 20.3}}, identifier: 'dismiss', label: 'Dismiss keyboard'
+              Button, 0x15d7f7480, {{156.7, 199.0}, {76.7, 20.3}}, identifier: 'increment', label: 'Increment'
+              StaticText, 0x15d7f7340, {{162.3, 235.3}, {65.3, 20.3}}, identifier: 'counter', label: 'Count: 0'
+              Button, 0x15d7f7200, {{115.7, 271.7}, {158.7, 20.3}}, identifier: 'open-extended', label: 'Web & dialog probes'
+              ScrollView, 0x15d7f70c0, {{16.0, 308.0}, {358.0, 486.0}}, identifier: 'scroll'
+                Other, 0x15d7f6f80, {{16.0, 308.0}, {358.0, 2228.0}}
+                  Other, 0x15d7f6e40, {{167.5, 319.8}, {55.0, 972.3}}
+                    StaticText, 0x15d7f6d00, {{171.3, 319.8}, {47.3, 20.3}}, identifier: 'row-0', label: 'Row 0'
+                    StaticText, 0x15d7f6bc0, {{172.8, 375.8}, {44.3, 20.3}}, identifier: 'row-1', label: 'Row 1'
+                    StaticText, 0x15d7f6a80, {{171.7, 431.8}, {46.7, 20.3}}, identifier: 'row-2', label: 'Row 2'
+                    StaticText, 0x15d7f6940, {{171.3, 487.8}, {47.3, 20.3}}, identifier: 'row-3', label: 'Row 3'
+                    StaticText, 0x15d7f6440, {{171.3, 543.8}, {47.3, 20.3}}, identifier: 'row-4', label: 'Row 4'
+                    StaticText, 0x15d7f6300, {{171.5, 599.8}, {47.0, 20.3}}, identifier: 'row-5', label: 'Row 5'
+                    StaticText, 0x15d7f61c0, {{171.3, 655.8}, {47.3, 20.3}}, identifier: 'row-6', label: 'Row 6'
+                    StaticText, 0x15d7f6080, {{171.8, 711.8}, {46.3, 20.3}}, identifier: 'row-7', label: 'Row 7'
+                    StaticText, 0x15d7f5f40, {{171.3, 767.8}, {47.3, 20.3}}, identifier: 'row-8', label: 'Row 8'
+                    StaticText, 0x15d7f5e00, {{171.3, 823.8}, {47.3, 20.3}}, identifier: 'row-9', label: 'Row 9'
+                    StaticText, 0x15e54c000, {{167.7, 879.8}, {54.7, 20.3}}, identifier: 'row-10', label: 'Row 10'
+                    StaticText, 0x15e54c140, {{169.0, 935.8}, {52.0, 20.3}}, identifier: 'row-11', label: 'Row 11'
+                    StaticText, 0x15e54c280, {{167.8, 991.8}, {54.3, 20.3}}, identifier: 'row-12', label: 'Row 12'
+                    StaticText, 0x15e54c3c0, {{167.7, 1047.8}, {54.7, 20.3}}, identifier: 'row-13', label: 'Row 13'
+                    StaticText, 0x15e54c500, {{167.5, 1103.8}, {55.0, 20.3}}, identifier: 'row-14', label: 'Row 14'
+                    StaticText, 0x15e54c640, {{167.8, 1159.8}, {54.3, 20.3}}, identifier: 'row-15', label: 'Row 15'
+                    StaticText, 0x15e54c780, {{167.7, 1215.8}, {54.7, 20.3}}, identifier: 'row-16', label: 'Row 16'
+                    StaticText, 0x15e54c8c0, {{168.2, 1271.8}, {53.7, 20.3}}, identifier: 'row-17', label: 'Row 17'
+                Other, 0x15e54ca00, {{341.0, 308.0}, {30.0, 486.0}}, label: 'Vertical scroll bar, 5 pages', value: 0%
+                  Other, 0x15e54cb40, {{368.0, 784.0}, {3.0, 7.0}}
+                Other, 0x15e54cc80, {{341.0, 308.0}, {30.0, 486.0}}, label: 'Vertical scroll bar, 5 pages', value: 0%
+                  Other, 0x15e54cdc0, {{368.0, 784.0}, {3.0, 7.0}}
+    Window, 0x15e54cf00, {{0.0, 0.0}, {390.0, 844.0}}
+      Other, 0x15e54d040, {{0.0, 0.0}, {390.0, 844.0}}
+        Other, 0x15e54d180, {{0.0, 0.0}, {390.0, 844.0}}
+Path to element:
+ →Application, 0x15d7f6580, pid: 8173, label: 'AgentSoma Probe'
+Query chain:
+ →Find: Target Application 'com.somnus.agentsoma.spike.fixture'
+  Output: {
+    Application, 0x15e54d2c0, pid: 8173, label: 'AgentSoma Probe'
+  }
