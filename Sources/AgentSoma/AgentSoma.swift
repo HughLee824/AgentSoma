@@ -15,7 +15,7 @@ struct SessionOptions: ParsableArguments {
 struct AgentSoma: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "agentsoma", abstract: "Eyes and hands for agents operating a real iPhone.",
-        subcommands: [Connect.self, Status.self, Open.self, Observe.self, Inspect.self, Tap.self, Swipe.self, TypeText.self, Disconnect.self, Host.self])
+        subcommands: [Devices.self, Connect.self, Status.self, Apps.self, Open.self, Observe.self, Inspect.self, Tap.self, Swipe.self, TypeText.self, Disconnect.self, Host.self])
     @OptionGroup var options: SessionOptions
 }
 
@@ -47,6 +47,26 @@ struct Connect: ParsableCommand {
     }
 }
 
+struct Devices: ParsableCommand {
+    static let configuration = CommandConfiguration(abstract: "List devices known to CoreDevice; connect checks session readiness.")
+    mutating func run() throws {
+        try output { ["ok": true, "result": ["devices": try DeviceDiscovery.devices()]] }
+    }
+}
+
+struct Apps: ParsableCommand {
+    static let configuration = CommandConfiguration(abstract: "List installed apps, up to 50 per page, without changing the device UI.")
+    @OptionGroup var options: SessionOptions
+    @Option(help: "Case-insensitive substring of the app name or bundle ID.") var query: String?
+    @Option(help: "Offset returned as nextOffset by the previous page.") var offset = 0
+    mutating func run() throws {
+        let session = try options.requiredSession()
+        var fields: [String: Any] = ["offset": offset]
+        fields["query"] = query
+        try output { try SessionClient.call(session: session, operation: "apps", fields: fields) }
+    }
+}
+
 struct Status: ParsableCommand {
     static let configuration = CommandConfiguration(abstract: "Check the session and Runner without renewing idle time.")
     @OptionGroup var options: SessionOptions
@@ -59,7 +79,7 @@ struct Status: ParsableCommand {
 struct Open: ParsableCommand {
     static let configuration = CommandConfiguration(abstract: "Bring an app to the foreground and renew the session.")
     @OptionGroup var options: SessionOptions
-    @Argument(help: "Installed app bundle identifier. The current spike Runner supports Fixture and Calculator only.") var bundleID: String
+    @Argument(help: "Installed app bundle identifier returned by apps.") var bundleID: String
     mutating func run() throws {
         let session = try options.requiredSession()
         try output { try SessionClient.call(session: session, operation: "open", fields: ["bundleId": bundleID]) }

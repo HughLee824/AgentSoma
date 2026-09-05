@@ -13,6 +13,7 @@ private final class ControlledBackend: SessionBackend {
     private(set) var openCount = 0
     private(set) var stopCount = 0
     private(set) var observeCount = 0
+    private(set) var appsCount = 0
     private(set) var actionCount = 0
     var actionFailure: ActionFailure?
     var blockAction = false
@@ -21,6 +22,10 @@ private final class ControlledBackend: SessionBackend {
 
     func start() throws -> [String: Any] { ["runnerSession": "controlled-runner", "runnerPid": 123] }
     func status() throws -> [String: Any] { try start() }
+    func apps() throws -> AppCatalog {
+        appsCount += 1
+        return try AppCatalog(["apps": [["bundleIdentifier": "com.example.fixture", "name": "Fixture"]]])
+    }
     func open(bundle: String) throws -> [String: Any] {
         if rejectOpenBeforeSend { throw TransportError(description: "Not connected", possiblySent: false) }
         openCount += 1
@@ -229,6 +234,35 @@ final class HostTests: XCTestCase {
         let renewed = try call(paths, session: session, op: "status")["idleRemainingSeconds"] as! Double
         XCTAssertGreaterThan(renewed, afterInvalid + 0.08)
         XCTAssertEqual(backend.observeCount, 1)
+        _ = try call(paths, session: session, op: "disconnect")
+        wait(for: [finished], timeout: 3)
+    }
+
+    func testAppDiscoveryRenewsOnlyOnSuccessAndPreservesObservationReferences() throws {
+        let backend = ControlledBackend()
+        let (paths, session, finished) = try host(timeout: 5, backend: backend)
+        _ = try call(paths, session: session, op: "observe")
+        let first = try call(paths, session: session, op: "status")["idleRemainingSeconds"] as! Double
+        Thread.sleep(forTimeInterval: 0.1)
+        let invalid = try call(paths, session: session, op: "apps", fields: ["offset": -1])
+        XCTAssertEqual(invalid["ok"] as? Bool, false)
+        XCTAssertEqual(backend.appsCount, 0)
+        let pastEnd = try call(paths, session: session, op: "apps", fields: ["offset": 2])
+        XCTAssertEqual(pastEnd["ok"] as? Bool, false)
+        let afterInvalid = try call(paths, session: session, op: "status")["idleRemainingSeconds"] as! Double
+        XCTAssertLessThan(afterInvalid, first - 0.08)
+        let listed = try call(paths, session: session, op: "apps", fields: ["offset": 0, "query": "Fixture"])
+        XCTAssertEqual((listed["result"] as? [String: Any])?["total"] as? Int, 1)
+        let renewed = try call(paths, session: session, op: "status")["idleRemainingSeconds"] as! Double
+        XCTAssertGreaterThan(renewed, afterInvalid + 0.08)
+        let inspected = try call(paths, session: session, op: "inspect", fields: ["reference": "o1:e11", "offset": 0])
+        XCTAssertEqual((inspected["result"] as? [String: Any])?["refs"] as? String, "current")
+        XCTAssertEqual(backend.observeCount, 1)
+        XCTAssertEqual(backend.actionCount, 0)
+        for bundle in ["invalid bundle", "com.example.fixture\n"] {
+            XCTAssertEqual(try call(paths, session: session, op: "open", fields: ["bundleId": bundle])["outcome"] as? String, "not_dispatched")
+        }
+        XCTAssertEqual(backend.openCount, 0)
         _ = try call(paths, session: session, op: "disconnect")
         wait(for: [finished], timeout: 3)
     }

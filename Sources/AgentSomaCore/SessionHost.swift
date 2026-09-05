@@ -80,13 +80,21 @@ final class SessionHost {
                    "outcome": "not_dispatched", "error": ["code": code, "message": message]], {})
         }
         guard request["version"] as? Int == 1, request["session"] as? String == config.session,
-              !id.isEmpty, (["status", "open", "observe", "inspect", "disconnect"] + DeviceAction.operations).contains(operation) else {
+              !id.isEmpty, (["status", "apps", "open", "observe", "inspect", "disconnect"] + DeviceAction.operations).contains(operation) else {
             reject("invalid_request", "Invalid session request")
             return
         }
         if operation == "open" {
-            guard let bundle = request["bundleId"] as? String, !bundle.isEmpty, bundle.utf8.count <= 255 else {
+            guard let bundle = request["bundleId"] as? String,
+                  bundle.range(of: "^[A-Za-z0-9][A-Za-z0-9.-]{0,254}\\z", options: .regularExpression) != nil else {
                 reject("invalid_bundle_id", "A bundle identifier is required")
+                return
+            }
+        }
+        if operation == "apps" {
+            guard let offset = request["offset"] as? Int, offset >= 0,
+                  request["query"] == nil || request["query"] is String else {
+                reject("invalid_app_query", "Use a text query and a nonnegative offset")
                 return
             }
         }
@@ -123,6 +131,9 @@ final class SessionHost {
             do {
                 switch operation {
                 case "status": response["result"] = try backend.status()
+                case "apps":
+                    response["result"] = try backend.apps().page(query: request["query"] as? String, offset: request["offset"] as! Int)
+                    effective = true
                 case "open":
                     previousObservation = observations.beginAction()
                     response["result"] = try backend.open(bundle: request["bundleId"] as! String)

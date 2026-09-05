@@ -162,13 +162,13 @@ final class LiveSessionTests: XCTestCase {
         if op == "ping" {
             let hostManaged = ProcessInfo.processInfo.environment["AGENTSOMA_HOST_MANAGED"] == "1"
             return ["protocol": "agentsoma-spike-jsonl-v1", "lifecycleOwner": hostManaged ? "host" : "spike",
-                    "lifetimeLimitSeconds": hostManaged ? NSNull() : 900, "observationVersion": 1, "actionVersion": 1]
+                    "lifetimeLimitSeconds": hostManaged ? NSNull() : 900, "observationVersion": 1, "actionVersion": 1, "launchVersion": 1]
         }
         if op == "shutdown" { return ["stopped": true] }
         if op == "launch" {
             let bundle = command["bundleId"] as? String ?? ""
-            guard ["com.somnus.agentsoma.spike.fixture", "com.apple.calculator"].contains(bundle) else {
-                throw CommandError("bundle_not_allowed_in_spike")
+            guard bundle.range(of: "^[A-Za-z0-9][A-Za-z0-9.-]{0,254}\\z", options: .regularExpression) != nil else {
+                throw CommandError("invalid_bundle_id")
             }
             let app = XCUIApplication(bundleIdentifier: bundle)
             let state = app.state

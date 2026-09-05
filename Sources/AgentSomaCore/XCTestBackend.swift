@@ -6,6 +6,7 @@ import Darwin
 protocol SessionBackend: AnyObject {
     func start() throws -> [String: Any]
     func status() throws -> [String: Any]
+    func apps() throws -> AppCatalog
     func open(bundle: String) throws -> [String: Any]
     func observe() throws -> CapturedObservation
     func perform(_ action: DeviceAction, target: ObservedTarget) throws -> [String: Any]
@@ -22,6 +23,7 @@ final class XCTestBackend: SessionBackend {
     private let token = UUID().uuidString + UUID().uuidString
     private var identity: String?
     private var runnerPID: Int?
+    private var deviceUDID: String?
 
     init(config: HostConfiguration, paths: SessionPaths) {
         self.config = config
@@ -41,6 +43,7 @@ final class XCTestBackend: SessionBackend {
             throw SomaError("coredevice_unavailable", "No native CoreDevice IPv6 address; see \(logURL.path)")
         }
         deviceLock = try DeviceLock(root: paths.directory.deletingLastPathComponent(), device: udid)
+        deviceUDID = udid
         let lockState = try deviceInfo("lockState")
         if lockState["passcodeRequired"] as? Bool == true {
             throw SomaError("device_locked", "Unlock the iPhone and connect again")
@@ -70,8 +73,8 @@ final class XCTestBackend: SessionBackend {
             if let response = try? request("ping", timeout: 1), response["ok"] as? Bool == true,
                let result = response["result"] as? [String: Any] {
                 guard result["lifecycleOwner"] as? String == "host", result["observationVersion"] as? Int == 1,
-                      result["actionVersion"] as? Int == 1 else {
-                    throw SomaError("runner_needs_rebuild", "Rebuild the Runner with current observation and action support")
+                      result["actionVersion"] as? Int == 1, result["launchVersion"] as? Int == 1 else {
+                    throw SomaError("runner_needs_rebuild", "Rebuild the Runner with current observation, action and app-launch support")
                 }
                 identity = response["sessionId"] as? String
                 runnerPID = response["runnerPid"] as? Int
@@ -86,21 +89,8 @@ final class XCTestBackend: SessionBackend {
     }
 
     private func deviceInfo(_ kind: String) throws -> [String: Any] {
-        let output = paths.directory.appendingPathComponent("device-\(kind).json")
-        let discovery = Process()
-        discovery.executableURL = URL(fileURLWithPath: "/usr/bin/xcrun")
-        discovery.arguments = ["devicectl", "device", "info", kind, "--device", config.device,
-                               "--timeout", "20", "--json-output", output.path]
-        discovery.standardInput = FileHandle.nullDevice
-        discovery.standardOutput = log
-        discovery.standardError = log
-        try discovery.run()
-        discovery.waitUntilExit()
-        guard discovery.terminationStatus == 0,
-              let result = try jsonObject(Data(contentsOf: output))["result"] as? [String: Any] else {
-            throw SomaError("device_preflight_failed", "CoreDevice \(kind) failed; see xcodebuild.log")
-        }
-        return result
+        try CoreDevice.read(["device", "info", kind, "--device", config.device],
+                            savingTo: paths.directory.appendingPathComponent("device-\(kind).json"))
     }
 
     private func metadata() -> [String: Any] {
@@ -132,8 +122,14 @@ final class XCTestBackend: SessionBackend {
     }
 
     func open(bundle: String) throws -> [String: Any] {
+        try apps().requireInstalled(bundle)
         let response = try request("launch", fields: ["bundleId": bundle])
         return try ActionReply.decode(response)
+    }
+
+    func apps() throws -> AppCatalog {
+        guard let deviceUDID else { throw SomaError("backend_unavailable", "Device is not connected") }
+        return try AppCatalog(CoreDevice.read(["device", "info", "apps", "--device", deviceUDID, "--include-all-apps"]))
     }
 
     func perform(_ action: DeviceAction, target: ObservedTarget) throws -> [String: Any] {
