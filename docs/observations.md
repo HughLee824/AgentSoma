@@ -1,6 +1,6 @@
-# 宿主观察与引用验收
+# 观察、缓存查询与引用
 
-2026-09-05 已实现 `observe`、`inspect`、确定性 AX 精简和会话内缓存。本记录保留第 3 阶段的 18 项本地测试及一次原生 CoreDevice 真机证据；同日第 4 阶段已接通按引用点击、滑动、输入与实时目标校验，新增证据见 [动作验收](actions.md)。
+`observe` 采集截图与 AX，宿主生成紧凑文本和会话内引用；`inspect` 读取同一份缓存快照。动作与引用校验见 [动作契约](actions.md)。
 
 ## 当前调用
 
@@ -31,8 +31,6 @@ agentsoma --session "$SESSION" inspect o2 --offset 20
 
 调用方已知引用时应直接 `inspect oN:eN`，不要从整棵树逐页查几何信息；尚未找到目标时用查询。`inspect oN | rg TEXT` 仅搜索那一页输出。若截图已明确显示目标位置，可通过已有的受守卫约束坐标动作继续；不必为找到一个 AX 名称而反复读取无关页。
 
-2026-09-06 验证：同轮完整 `swift test` 为 81 项通过。新增测试覆盖第 186 个节点的定位、长属性原文匹配与几何保留、同名来源节点、子树限制、匹配分页及 shell 特殊字符原样续页、源截断/AX 不可用、缓存淘汰、引用状态与续期规则。真实 CLI 配合本地模拟 IPC 的 5 项检查通过，覆盖参数传输、默认 inspect、旧宿主、查询回显不一致及原有错误传播；没有操作设备 UI。
-
 [完整 CLI 输出样例](examples/observe/observe.cli.example.txt) 来自本次 Calculator 的 o4，未经改写。文件里的临时路径随会话关闭已失效；实验副本在下方证据目录。实际采集的部分正文如下：
 
 ```text
@@ -46,7 +44,7 @@ agentsoma --session "$SESSION" inspect o2 --offset 20
 
 显示为 `[e24]` 的节点，其完整引用是该会话的 `o4:e24`。引用只标识已采集的来源节点，不能据此认定设备目标唯一、可点击或仍在原位置。`refs=current` 只表示它尚未被宿主失效；type/press 执行前校验实时 AX 目标，tap/swipe 执行前校验上下文和分区画面。画面相似不延长引用，见 [动作前画面校验](screen-guard.md)。
 
-## 本阶段收敛的实现值
+## 输出与缓存限制
 
 这些是可调整的工程默认值，沿用已确认的产品语义，不代表用户逐项指定了数值。
 
@@ -69,23 +67,8 @@ agentsoma --session "$SESSION" inspect o2 --offset 20
 
 ## 采集事实与限制
 
-薄 Runner 检查 SpringBoard 是否有唯一 Alert；否则采集已经 open 且确认 runningForeground 的目标 App；前台不能确认时返回截图，AX 标记 unavailable、foreground 标记 null。第 4 阶段增加 App 内唯一 Alert 的独立 `appAlert` 范围。唯一系统 Alert 的结构属于 SpringBoard，不能把目标 App 当成该系统界面的前台身份。没有独立发现任意前台 App 的能力，也没有自动选择允许/拒绝权限的动作。
+薄 Runner 检查 SpringBoard 是否有唯一 Alert；否则采集已经 open 且确认 runningForeground 的目标 App；前台不能确认时返回截图，AX 标记 unavailable、foreground 标记 null。App 内唯一 Alert 使用独立的 `appAlert` 范围。唯一系统 Alert 的结构属于 SpringBoard，不能把目标 App 当成该系统界面的前台身份。没有独立发现任意前台 App 的能力，也没有自动选择允许/拒绝权限的动作。
 
 AX 开始/结束时间与截图后的时间分别返回；屏幕点坐标框来自采集 App 的 frame，未知时返回 null，PNG 像素尺寸由 Mac 解码图像验证。截图与 AX **不是原子快照，也不保证界面已稳定**。
 
-本次直接在 open 后采集，o2 Fixture 和 o3 Calculator 的截图拍到了切换动画，AX 已是目标 App 内容。后续独立的 o4 截图显示稳定 Calculator `2+3=5`，与它的 AX 文本一致。保留这组差异作为时序证据；没有给 Runner 增加固定等待或自动重拍策略，调用 agent 可根据截图再 observe。
-
-当前仍需传入新构建、已签名的 `--xctestrun`；旧 Runner 缺少观察版本标记会提示重建。open 仍受探针 Fixture/Calculator 范围限制。自动系统 Alert 采集路径本轮只用历史真实权限 AX 样本验证精简，未再次制造权限弹窗；广泛前台发现与不同系统弹窗覆盖仍未完成。
-
-## 验证记录
-
-环境未变：macOS 15.0.1 / Xcode 16.0 / iOS 26.6、iPhone13,3；没有 WDA、iproxy 或 pymobiledevice3 运行依赖。
-
-- `swift test`：18 项通过，覆盖既有生命周期、真实 Unix IPC、历史 WebView/系统权限 AX 样本、同名目标保留、长字段/200 节点预算、inspect 分页与原属性一致性、旧引用拒绝、未派发保留、unknown 不重放、缓存淘汰和空闲清理。
-- 真机 15 次独立 CLI 调用：同一宿主 PID 85837、Runner PID 8814 / UUID `7CBD782D-67DE-4CC2-8983-D8FEA943BCC9`。四次 observe、原快照详情、App 切换后的引用失效、两份缓存上限、旧 session 拒绝全部通过。
-- Fixture 37 个源节点，默认文本共 1198 字节（包含元信息和路径）；完整节点属性另存。两次 Calculator 观察各为 42 个节点。
-- inspect 前后各一次 status 的 Runner sequence 差为 1，证明中间 inspect 没有请求 Runner；详情读自对应快照。
-- 三次有 AX 的 observe 为 0.453–0.800 秒；首次未知前台的 observe 为 1.699 秒；inspect 为 0.015–0.031 秒。这些是单次会话样本，包含进程启动与序列化，不是性能保证。
-- disconnect 返回正常；本轮 XCTest 1 通过、0 失败、0 跳过。宿主、xcodebuild 和设备 Runner 均已退出，Unix socket 和观察缓存已删除。
-
-本地证据目录（git 忽略）：`spikes/ios-xctest/evidence/observe-cli-20260905-01/`。其中 commands.json 保留独立调用、退出码和耗时；o1–o4 的 txt/png/json 是关闭前保存的实验副本；verification.json 记录断言及源码 SHA256；xcode-summary.json 与 run.xcresult 记录实际 Runner 结果。这些是开发验收证据，不是 AgentSoma 的任务历史功能。
+App 切换动画可能造成截图与 AX 表现不一致，调用 agent 应读取截图并按需重新 observe。通用 App 打开与安装检查见 [设备/App 发现](discovery.md)，签名与协议升级见 [首次接入](onboarding.md)。

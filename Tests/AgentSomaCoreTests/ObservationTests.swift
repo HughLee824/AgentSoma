@@ -2,11 +2,10 @@ import XCTest
 import Foundation
 @testable import AgentSomaCore
 
-// Recorded AX with a synthetic full-screen PNG, independent of ignored device artifacts.
-func observationFixture(_ name: String = "spike-observe.json") throws -> CapturedObservation {
-    let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-    let response = try jsonObject(Data(contentsOf: root.appendingPathComponent("docs/examples/observe/\(name)")))
-    var result = response["result"] as! [String: Any]
+// Sanitized AX with a synthetic full-screen PNG, independent of local device artifacts.
+func observationFixture(_ name: String = "app.json") throws -> CapturedObservation {
+    let fixture = try XCTUnwrap(Bundle.module.url(forResource: name, withExtension: nil, subdirectory: "Fixtures/Observations"))
+    var result = try jsonObject(Data(contentsOf: fixture))
     result["screenshotBase64"] = try screenPNG().base64EncodedString()
     result["axStatus"] = "available"
     result["snapshotFinishedAt"] = result["screenshotCapturedAt"]
@@ -148,7 +147,7 @@ final class ObservationTests: XCTestCase {
     }
 
     func testSystemAlertScopeIsDistinctFromTargetAndKeepsBothChoices() throws {
-        let capture = try observationFixture("spike-system-alert.json")
+        let capture = try observationFixture("system-alert.json")
         let (cache, _) = try cache()
         let response = try cache.store(capture)
         let text = try XCTUnwrap(response["text"] as? String)

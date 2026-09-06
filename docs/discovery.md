@@ -1,6 +1,6 @@
 # 设备/App 发现与完整 CLI 调用
 
-设备发现通过 Mac 上的 `xcrun devicectl list devices`，App 发现通过 `devicectl device info apps --include-all-apps`。读取 Apple 工具的 JSON 文件，不解析显示表格，不增加第三方运行工具。Xcode 16 所带工具的本地 `help` 明确将 JSON 文件列为脚本消费接口；本轮字段依据实际设备输出。
+设备发现通过 Mac 上的 `xcrun devicectl list devices`，App 发现通过 `devicectl device info apps --include-all-apps`。读取 Apple 工具的 JSON 文件，不解析显示表格，不增加第三方运行工具。Xcode 16 所带工具的本地 `help` 明确将 JSON 文件列为脚本消费接口；字段依据原生设备输出映射。
 
 ## CLI 契约
 
@@ -24,7 +24,7 @@ agentsoma --session "$SESSION" disconnect
 {"ok":true,"result":{"devices":[{"id":"DEVICE_UDID","name":"iPhone 12 Pro","osVersion":"26.6","platform":"iOS","deviceType":"iPhone","connection":{"transport":"wired","tunnelState":"disconnected","pairingState":"paired"}}]}}
 ```
 
-`apps` 使用会话已确认的规范 UDID，由 Mac 查询安装元数据。每项仅返回 `name` 和 `bundleId`，名称未知为 `null`。按 bundle ID 排序，每页最多 50 项；`--query` 对名称或 bundle ID 做不区分大小写的子串匹配，`--offset` 用于同一查询的后续页。`total` 为匹配总数，末页 `nextOffset` 为 `null`，无匹配返回空数组。字段映射和分页是工程默认值，不是新的用户产品要求。
+`apps` 使用会话已确认的规范 UDID，由 Mac 查询安装元数据。每项仅返回 `name` 和 `bundleId`，名称未知为 `null`。按 bundle ID 排序，每页最多 50 项；`--query` 对名称或 bundle ID 做不区分大小写的子串匹配，`--offset` 用于同一查询的后续页。`total` 为匹配总数，末页 `nextOffset` 为 `null`，无匹配返回空数组。字段映射和分页上限由宿主实现。
 
 实际筛选响应的 result：
 
@@ -46,9 +46,7 @@ CoreDevice 的非零退出保留原始日志末尾最多 4000 个字符，并在
 
 成功发现设备后，再根据 devices 返回的信息和原始任务继续 connect。若允许通信的执行环境中仍失败，应继续使用实际错误定位设备连接、配对或开发服务问题；不要反复执行同一失败命令、直接跳到 connect 重复相同预检，或默认重启系统服务。AgentSoma 不自动重试、提权或重启服务。
 
-这些诊断同样适用于 connect 的 CoreDevice 预检，以及 apps/open 的安装清单查询；沿用现有的错误消息传播和动作三态规则。仅修改了 CLI/宿主代码，重新 `swift build` 并用新 CLI 建立会话即可，Runner 协议没有变化。
-
-2026-09-06 验证：新增分类测试覆盖真实初始化超时文本、明确权限拒绝、未知错误和长日志；同轮完整 `swift test` 为 81 项通过。实际只读 devices 在沙盒内返回新的 `coredevice_initialization_timeout` 及排查提示，经调用工具授权后在沙盒外执行同一命令成功返回设备清单，未重启系统服务或启动设备 Runner。
+这些诊断同样适用于 connect 的 CoreDevice 预检，以及 apps/open 的安装清单查询；沿用现有的错误消息传播和动作三态规则。仅修改 CLI/宿主代码时，重新 `swift build` 并用新 CLI 建立会话；是否需要更新 Runner 由协议兼容性检查决定。
 
 ## 打开已安装 App
 
@@ -58,22 +56,6 @@ Runner 只检查 bundle ID 格式，封装 XCTest 的 activate/launch、前台�
 
 安装列表不保证某个 App 一定能启动、暴露可用 AX 或接受全部输入方式。若安装检查后设备/App 状态变化，仍由既有执行阶段与三态结果表达，不自动重发，也不扩大兼容性承诺。观察与动作继续沿用 [观察契约](observations.md) 和 [动作契约](actions.md)。
 
-## 验收记录
-
-本轮使用 macOS 15.0.1 / Xcode 16.0 / iPhone 12 Pro、iOS 26.6；源码和真机原始结果位于 git 忽略的 `spikes/ios-xctest/evidence/discovery-cli-20260905-01/`。该目录用于开发验收，不是产品任务历史功能。
-
-本地 `swift test` 的 29 项测试通过，覆盖设备缺失字段和离线状态、格式错误与空列表的区别、分页与名称筛选、精确安装检查、成功/失败查询的续期和引用保留，以及已有生命周期、观察和动作回归。
-
-真机共 26 次独立 CLI 调用、5 次观察，始终复用 Runner PID 8916 / UUID `40CC5186-569E-4602-82A5-9293C30EB44B`：
-
-- 从 devices 返回的 UDID 建立会话；apps 四页分别返回 50、50、50、37 项，合并后与原生 187 项清单一致，无遗漏/重复。Fixture bundle 筛选及混合大小写的 Settings 名称筛选均通过。
-- 查询不存在的 App 返回空列表；open 同一 bundle 返回明确的派发前拒绝。两次 status 的 Runner sequence 仅增加一次，证明夹在中间的 apps、拒绝和 inspect 没有发出 Runner 请求。inspect 显示原引用仍 current，随后同一引用点击成功。
-- Fixture 的 Count 从 0 变为 1；再次 open 后仍为 1，没有隐含重启。o1/o2 截图与 AX 核对一致。
-- 从发现结果打开原白名单外的 Settings，读取 o4 截图后按引用点击 General；o5 的页面标题和截图确认已进入 General。只进行页面导航，没有修改设置值。两个系统页都达到 200 节点源上限，输出如实区分未展开内容和源截断，已采集目标仍能正常校验。
-- 持续会话 XCTest 为 1 通过、0 失败、0 跳过。disconnect 收到 shutdown 确认，xcodebuild 正常退出，无强制终止；socket 和观察缓存删除。Mac 宿主 PID 188、xcodebuild PID 194 和设备 Runner 均确认退出。
-
-证据包含 commands.json、o1–o5 的文本/PNG/源节点、原生发现结果、XCTest 摘要与 run.xcresult，以及 verification.json 的断言、源码 SHA256 和清理核对。调用 agent 实际读取了 o1、o2、o4、o5 图片；命令记录脚本仅记录传入的 CLI 调用，不解释任务或选择动作。
-
 ## 当前边界
 
-默认发现入口、按会话调用和通用 App 打开已实现。本轮验收时接入仍使用预构建 `--xctestrun`；后续已增加独立 Runner 的 build-runner 命令并验证首次安装，见 [接入说明](onboarding.md)。仍需要本机 Xcode 签名环境。当前结果不证明免 Xcode 部署、完全移除 Runner、物理重连自动恢复或任意 App 的全部操作兼容性；后续仍按已接受的优先级推进。
+发布包使用 setup 准备 Runner 后直接 connect；源码开发使用 build-runner 生成已签名的 `.xctestrun`，见 [接入说明](onboarding.md)。两种流程都需要本机 Xcode 和开发签名。设备发现和安装清单不证明免 Xcode 部署、无 Runner 控制、物理重连自动恢复或任意 App 的全部操作兼容性。

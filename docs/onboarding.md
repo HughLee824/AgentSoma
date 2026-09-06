@@ -1,6 +1,6 @@
 # 首次接入
 
-发布包携带预编译 CLI 与 Runner。用户在本机 Mac/Xcode 环境中使用自己的开发签名重签 Runner；外部 agent 执行 setup、连接及设备命令。登录 Apple 账号、首次信任和系统确认由用户完成。当前只生成本地候选包，公共下载渠道尚未配置。
+发布包携带预编译 CLI 与 Runner。用户在本机 Mac/Xcode 环境中使用自己的开发签名重签 Runner；外部 agent 执行 setup、连接及设备命令。登录 Apple 账号、首次信任和系统确认由用户完成。分发渠道和安装步骤见 [安装说明](install.md)。
 
 ## 发布包 setup
 
@@ -113,28 +113,6 @@ swift build
 
 ## 工程边界
 
-`Runner/LiveSessionTests.swift` 是原有会话 Runner 的同一实现；独立原生 Xcode 工程只编译该文件，没有 Fixture 依赖或额外固定测试。测试模块仍叫 `AgentSomaTests`，以保持现有宿主选择器兼容。旧探针的 `project.yml` 引用同一源码；重建探针前重新运行 XcodeGen。正式 Runner 构建不需要它。
+独立 Xcode 工程编译 `Runner/LiveSessionTests.swift`，并共享 `Sources/AgentSomaCore` 中的帧稳定、画面校验和 XCTest 诊断实现，不依赖本地探针或 Fixture。测试模块叫 `AgentSomaTests`，构建不需要 XcodeGen。目录职责见 [架构与仓库布局](architecture.md)。
 
 免 Xcode 安装、全新 Mac 配置、免费 Personal Team 签名以及更多 OS/设备组合仍未验证。发布 Runner 的编译下限为 iOS 17，源码工程默认仍为 iOS 16；macOS CLI 编译下限为 13。这些编译下限不是完整链路的支持承诺。发布包验收见 [Release 与 setup](release-setup.md)。
-
-## 2026-09-05 验收
-
-代码提交 `2c5019d`；环境为 macOS 15.0.1、Xcode 16.0 / Swift 6.0、iPhone 12 Pro / iOS 26.6。沿用已有开发证书和 profile，没有升级 Xcode 或申请新的签名资源。
-
-| 检查 | 结果 |
-| --- | --- |
-| 本地测试 | 33 项通过，新增 4 项覆盖签名参数边界、缺失源码、实际 SDK 文件名、两种 manifest 布局、缺失/歧义/错误产物。 |
-| 独立构建 | 指定既有测试 bundle ID 和使用默认 bundle ID 的两次签名构建均成功。默认构建从仅包含 Runner 的干净副本完成，源码路径含空格，CLI 从 `/private/tmp` 调用。构建未使用 XcodeGen。 |
-| 签名未配置 | 省略团队且工程未配置团队时，CLI 退出 1，返回 `runner_build_failed` 与包含缺少开发团队原因的日志路径；失败构建使用另一独立目录。 |
-| 产物 | manifest 的 `UseUITargetAppProvidedByTests=true`，依赖只有 Runner.app 与内嵌测试 bundle，没有 `UITargetAppPath` 或 Fixture。源码副本与提交的 Runner 文件逐字节相同。 |
-| 首次安装及操作 | 安装前原生清单没有 `com.agentsoma.runner.xctrunner`；connect 后清单确认存在，且这是唯一新增 bundle ID。8 次独立 CLI 调用完成连接、安装确认、打开设置、观察、引用点击返回、再观察、status 与 disconnect。 |
-| 结果与清理 | 两张 1170×2532 截图均由调用 agent 实际读取，AX 和图片确认 General → Settings，未改动设置值。复用 Runner PID 8930 / UUID `62CE2CCD-B534-4C0B-B55E-C2E65E465C04`，XCTest 1 通过、0 失败、0 跳过。宿主 4136、xcodebuild 4142 与设备 Runner 均已退出，socket/观察缓存删除，没有强制终止。 |
-
-Settings 两次采集都如实报告 200 节点的源截断；没有将其视为完整 AX。构建产物和已安装 Runner 保留供后续会话使用。本次没有重新执行此前已通过的输入/弹窗矩阵；旧探针仅重新生成工程，确认共享源码引用有效。
-
-本机证据位于 Git 忽略目录 `spikes/ios-xctest/evidence/onboarding-20260905-01/`：
-
-- [汇总与源码哈希](../spikes/ios-xctest/evidence/onboarding-20260905-01/verification.json)、[8 次 CLI 原始结果](../spikes/ios-xctest/evidence/onboarding-20260905-01/commands.json)。
-- [默认构建路径](../spikes/ios-xctest/evidence/onboarding-20260905-01/build.json)、[构建日志](../spikes/ios-xctest/evidence/onboarding-20260905-01/build.log)、[缺少签名配置的结果](../spikes/ios-xctest/evidence/onboarding-20260905-01/missing-signing.json)。
-- [General 截图](../spikes/ios-xctest/evidence/onboarding-20260905-01/o1.png)、[返回后的 Settings 截图](../spikes/ios-xctest/evidence/onboarding-20260905-01/o2.png)。同目录含原始快照、安装前后清单、进程清理记录与完整 `run.xcresult`。
-- [XCTest 摘要](../spikes/ios-xctest/evidence/onboarding-20260905-01/xctest-summary.json)、[本地测试日志](../spikes/ios-xctest/evidence/onboarding-20260905-01/swift-tests.log)。

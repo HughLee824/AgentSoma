@@ -67,7 +67,7 @@ agentsoma connect --device "$IOS_UDID" --xctestrun "$SIGNED_XCTESTRUN"
 
 #### From a release package
 
-The distribution workflow targets **Apple Silicon / macOS 15+**. The repository's [release notes](docs/release-setup.md) dated September 6, 2026 record the first public release as pending. Once a stable release and Tap formula are published:
+The distribution workflow targets **Apple Silicon / macOS 15+**. Check [GitHub Releases](https://github.com/HughLee824/AgentSoma/releases) for available packages. Once a stable release and Tap formula are published:
 
 ```sh
 brew install HughLee824/tap/agentsoma
@@ -182,9 +182,9 @@ Session files default to `/private/tmp/agentsoma-<uid>` with directory permissio
 | [`Sources/AgentSoma`](Sources/AgentSoma) | CLI commands and argument parsing. |
 | [`Sources/AgentSomaCore`](Sources/AgentSomaCore) | Sessions, transport, observations, actions, signing, and device discovery. |
 | [`Runner`](Runner) | Thin iOS XCTest Runner and standalone Xcode project. |
-| [`Tests`](Tests) | Swift tests for host behavior and device contracts. |
+| [`Tests`](Tests) | Swift tests and sanitized fixtures for host behavior and device contracts. |
 | [`scripts`](scripts) / [`packaging`](packaging) | Release packaging, verification, and Homebrew tooling. |
-| [`docs`](docs) / [`spikes`](spikes) | Technical documentation, validation records, and earlier experiments. |
+| [`docs`](docs) | Public usage guides, architecture, and curated examples. |
 
 ## Current limitations
 
@@ -198,7 +198,7 @@ AgentSoma is in early development. Real-device validation covers the environment
 
 ## Documentation
 
-Detailed guides are currently in Chinese; both README versions cover the same getting-started workflow.
+Detailed usage guides are currently in Chinese; the architecture guide is in English. Both README versions cover the same getting-started workflow.
 
 | Guide | Contents |
 | --- | --- |
@@ -207,9 +207,8 @@ Detailed guides are currently in Chinese; both README versions cover the same ge
 | [Device and app discovery](docs/discovery.md) | Discovery commands, pagination, and CoreDevice diagnostics. |
 | [Observations](docs/observations.md) · [Sample output](docs/examples/observe/README.md) | Screenshots, AX text, cached queries, references, and examples. |
 | [Actions](docs/actions.md) · [Screen guard](docs/screen-guard.md) | Input semantics, controlled dragging, stability, and pre-dispatch checks. |
-| [CLI architecture](docs/cli-vs-mcp.md) · [Interface design](docs/agent-interface.md) | Design decisions and interface contracts. |
+| [Architecture and repository layout](docs/architecture.md) | Component responsibilities, session lifecycle, and tracked versus local files. |
 | [Release workflow](docs/release-setup.md) | Building, verifying, and distributing the CLI and Runner. |
-| [Scope and requirements](alignment.md) | Project goals, accepted decisions, and boundaries. |
 
 ## Contributing
 
@@ -224,7 +223,7 @@ python3 -m unittest discover -s scripts/tests -v
 
 Python 3.9+ is used for release tooling and its tests, not the installed CLI runtime. The only Swift package dependency is [Swift ArgumentParser](https://github.com/apple/swift-argument-parser/tree/1.5.0), pinned to `1.5.0`.
 
-CI does not have a physical iPhone. For device-facing changes, also build a fresh Runner and verify the affected workflow on hardware. Include Mac/Xcode/iOS versions, reproduction steps, expected behavior, and relevant errors in reports. Remove private screen content, provisioning profiles, and signing material before sharing logs. Keep the English and Chinese READMEs in sync when changing shared instructions.
+CI does not have a physical iPhone. For device-facing changes, also build a fresh Runner and verify the affected workflow on hardware. Include Mac/Xcode/iOS versions, reproduction steps, expected behavior, and relevant errors in reports. Remove private screen content, provisioning profiles, and signing material before sharing logs. Keep the English and Chinese READMEs in sync when changing shared instructions. Follow the [repository layout](docs/architecture.md#repository-layout) when adding files; local experiments and device records stay outside Git.
 
 ## License
 

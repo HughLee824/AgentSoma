@@ -67,7 +67,7 @@ agentsoma connect --device "$IOS_UDID" --xctestrun "$SIGNED_XCTESTRUN"
 
 #### 使用发布包
 
-分发流程面向 **Apple Silicon / macOS 15+**。仓库 2026 年 9 月 6 日的[发布记录](docs/release-setup.md)显示首次公共发布尚在准备中。稳定版 Release 发布且 Tap formula 更新后，可运行：
+分发流程面向 **Apple Silicon / macOS 15+**。可用安装包以 [GitHub Releases](https://github.com/HughLee824/AgentSoma/releases) 为准。稳定版 Release 发布且 Tap formula 更新后，可运行：
 
 ```sh
 brew install HughLee824/tap/agentsoma
@@ -182,9 +182,9 @@ flowchart LR
 | [`Sources/AgentSoma`](Sources/AgentSoma) | CLI 命令与参数解析。 |
 | [`Sources/AgentSomaCore`](Sources/AgentSomaCore) | 会话、通信、观察、动作、签名和设备发现。 |
 | [`Runner`](Runner) | 薄 iOS XCTest Runner 与独立 Xcode 工程。 |
-| [`Tests`](Tests) | 宿主行为与设备契约的 Swift 测试。 |
+| [`Tests`](Tests) | 宿主行为与设备契约的 Swift 测试，以及脱敏测试数据。 |
 | [`scripts`](scripts) / [`packaging`](packaging) | 发布打包、校验与 Homebrew 工具。 |
-| [`docs`](docs) / [`spikes`](spikes) | 技术文档、验收记录与早期实验。 |
+| [`docs`](docs) | 公开使用指南、架构说明和精选示例。 |
 
 ## 当前限制
 
@@ -198,7 +198,7 @@ AgentSoma 处于早期开发阶段。真机验收覆盖上述实测环境，不�
 
 ## 文档导航
 
-详细指南目前以中文提供；英文与中文 README 覆盖相同的入门流程。
+详细使用指南目前以中文提供，架构指南以英文提供；中英文 README 覆盖相同的入门流程。
 
 | 文档 | 内容 |
 | --- | --- |
@@ -207,9 +207,8 @@ AgentSoma 处于早期开发阶段。真机验收覆盖上述实测环境，不�
 | [设备与 App 发现](docs/discovery.md) | 发现命令、分页与 CoreDevice 诊断。 |
 | [观察契约](docs/observations.md) · [输出样例](docs/examples/observe/README.md) | 截图、AX 文本、缓存查询、引用及示例。 |
 | [动作接口](docs/actions.md) · [画面校验](docs/screen-guard.md) | 输入语义、可控拖动、稳定检测与派发前检查。 |
-| [CLI 架构选型](docs/cli-vs-mcp.md) · [接口设计](docs/agent-interface.md) | 架构决策与接口契约。 |
+| [架构与仓库布局](docs/architecture.md) | 模块职责、会话生命周期，以及公共文件与本地文件的边界。 |
 | [发布流程](docs/release-setup.md) | CLI 与 Runner 的构建、校验及分发。 |
-| [需求与边界](alignment.md) | 项目目标、已确认决策和范围。 |
 
 ## 参与贡献
 
@@ -224,7 +223,7 @@ python3 -m unittest discover -s scripts/tests -v
 
 Python 3.9+ 仅用于发布工具及其测试，不是已安装 CLI 的运行依赖。唯一 Swift 包依赖为 [Swift ArgumentParser](https://github.com/apple/swift-argument-parser/tree/1.5.0)，锁定版本 `1.5.0`。
 
-CI 没有真实 iPhone。涉及设备行为的改动还需重新构建 Runner，并在真机验证受影响流程。问题报告应包含 Mac/Xcode/iOS 版本、复现步骤、预期行为和相关错误。分享日志前移除私人画面内容、provisioning profile 和签名资料。修改公共使用说明时，请同步更新中英文 README。
+CI 没有真实 iPhone。涉及设备行为的改动还需重新构建 Runner，并在真机验证受影响流程。问题报告应包含 Mac/Xcode/iOS 版本、复现步骤、预期行为和相关错误。分享日志前移除私人画面内容、provisioning profile 和签名资料。修改公共使用说明时，请同步更新中英文 README。新增文件请遵循[目录约定](docs/architecture.md#repository-layout)，本地实验和设备记录不进入 Git。
 
 ## 许可证
 

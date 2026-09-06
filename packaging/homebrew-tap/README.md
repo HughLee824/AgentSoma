@@ -29,4 +29,4 @@ The workflow rejects draft and prerelease versions, checks the archive checksum,
 
 Formula generation and the workflow template are maintained in [AgentSoma's packaging directory](https://github.com/HughLee824/AgentSoma/tree/main/packaging/homebrew-tap). Sync template changes deliberately; normal formula updates only change `Formula/agentsoma.rb`.
 
-MIT licensed; see [LICENSE](LICENSE).
+MIT licensed; see [LICENSE](https://github.com/HughLee824/AgentSoma/blob/main/LICENSE).

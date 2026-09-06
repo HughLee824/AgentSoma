@@ -13,6 +13,6 @@ let package = Package(
         .executableTarget(name: "AgentSoma", dependencies: [
             "AgentSomaCore", .product(name: "ArgumentParser", package: "swift-argument-parser")
         ]),
-        .testTarget(name: "AgentSomaCoreTests", dependencies: ["AgentSomaCore"])
+        .testTarget(name: "AgentSomaCoreTests", dependencies: ["AgentSomaCore"], resources: [.copy("Fixtures")])
     ]
 )

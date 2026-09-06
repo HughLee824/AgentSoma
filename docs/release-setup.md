@@ -1,8 +1,8 @@
 # Release 与 setup
 
-状态：2026-09-06 已完成已有付费开发签名条件下的真机验证；已接入 GitHub Release 草稿、Homebrew Tap 与手动下载分发流程，当前尚未发布公共 release。项目采用 MIT，发布仓库为 `HughLee824/AgentSoma`，Tap 为 `HughLee824/homebrew-tap`。
+发布采用“预编译 CLI + 预编译 Runner，本机重签部署”。项目采用 MIT，发布仓库为 `HughLee824/AgentSoma`，Tap 为 `HughLee824/homebrew-tap`。
 
-用户选择的路线为“预编译 CLI + 预编译 Runner，本机重签部署”。保留 Xcode 和用户自己的开发签名前提，日常使用不依赖源码仓库或 `.build` 目录。用户流程见[首次接入](onboarding.md)，发布包附带的独立说明见[安装说明](install.md)。
+保留 Xcode 和用户自己的开发签名前提，日常使用不依赖源码仓库或 `.build` 目录。用户流程见[首次接入](onboarding.md)，发布包附带的独立说明见[安装说明](install.md)。
 
 ## 包结构与信任边界
 
@@ -59,30 +59,13 @@ AgentSoma 仍是 macOS CLI。Mac Developer ID 签名、公证是下载渠道与�
 
 Tap 初始文件位于 `packaging/homebrew-tap`，另复制仓库根目录的 `LICENSE`。其更新工作流只需要 Tap 自身的 `GITHUB_TOKEN`，不需要跨仓库写入 PAT；AgentSoma 源码与 Release 需公开可读。首次稳定版之前不放置指向不存在资产的 formula。预发布版本通过 GitHub Releases 手动安装。
 
-远程准备状态（2026-09-06）：已创建公开的 `HughLee824/AgentSoma` 空仓库，并将本项目 `origin` 配置到该仓库；`HughLee824/homebrew-tap` 的 MIT、README 和更新工作流已初始化，提交为 `31084c2`。AgentSoma 源码尚未推送，公共 Release 与稳定 formula 尚未创建。推送源码后，按上面的顺序运行首次发布。
+Release 和 Tap 的实际可用版本以各仓库为准；发布流程不会自动把本地候选包或开发验收记录上传。
 
 formula 将原包的 `bin` 与 `libexec` 一起放在 Homebrew keg 的 `libexec` 下，并创建 `bin/agentsoma` 软链接，保持 CLI 的相对资源定位规则。安装与升级不执行 setup，不编译、不在 iPhone 上操作。每次 release 的 `brew test` 检查安装后的 CLI 与 Runner 全部文件摘要，以发现 Homebrew 清理或二进制处理引入的修改。
 
-## 当前验收
+## 验证范围
 
-环境：Apple Silicon、macOS 15.0.1、Xcode 16.0 / Swift 6.0、iPhone 12 Pro / iOS 26.6，已有付费开发团队的证书和 profile。没有申请新的 Apple 签名资源。
-
-| 检查 | 结果 |
-| --- | --- |
-| Swift 回归测试 | 92 项通过；新增 11 项覆盖发布包搬移/软链接入口、CLI 混装、文件缺失/改动/额外文件、profile/Frameworks 泄漏、外部 xctestrun 路径、最低 iOS 版本、profile 授权与到期、签名选择及设备准备状态。 |
-| 预编译技术验证 | 先将现有预编译 Runner 去除签名资料和内嵌框架，再本地重签、安装启动；重签前后两个可执行文件的 `__TEXT,__text` 摘要一致。 |
-| 首次 setup | 全新维护者构建的候选包从仓库外、含空格的搬移目录及软链接入口执行成功，返回 `compiled:false`、`reused:false`。 |
-| 重复 setup | 省略 profile、identity 和 team，成功发现保存的签名配置，返回 `compiled:false`、`reused:true`。 |
-| 最终归档与升级 | `0.1.0-dev.6` 从经过 SHA-256 校验的 tar.gz 解压、搬移并设为只读；旧准备记录返回 `setup_update_required`，随后 setup、重复 setup 和新连接均通过，安装目录内容未改变。两个可执行文件重签前后的 `__TEXT,__text` 摘要一致。 |
-| 文件损坏 | 改动实际发布包的 Runner 后，setup 在查询设备前返回 `runner_package_invalid`。 |
-| 日常连接 | 不传 `.xctestrun`，connect、打开系统设置、observe 和 disconnect 均成功；截图 1170×2532，AX 可用，Runner 显示为 AgentSoma Runner。 |
-| 清理 | 正常 shutdown 确认，xcodebuild 退出 0，没有强制终止，观察缓存移除。 |
-
-本次证据保存在本机 `/private/tmp/agentsoma-release-acceptance-20260906`，技术探针在 `/private/tmp/agentsoma-prebuilt-probe-20260906`。目录包含用户本机数据，不随发布包分发；自动化测试不依赖这些目录。
-
-验收用候选包同时安装在用户级 `~/.local/share/agentsoma/releases/0.1.0-dev.6`，入口为 `~/.local/bin/agentsoma`。这只是当前本机的安装位置，不硬编码到 CLI 或发布格式中。
-
-分发流程补充验收（2026-09-06）：92 项 Swift 测试和 16 项 Python 发布工具测试通过；actionlint 1.7.11 检查三份工作流通过。`0.1.0-dev.7` 候选包通过归档、搬移、软链接执行和签名检查，SHA-256 为 `3b78d21f86fe62740003cf7030f3c397fc1213a5e4d972969b2ec1f3fd5a3f1b`。Homebrew 6.0.12 从本地临时 Tap 安装成功，`brew test` 通过；CLI 和 Runner 的 6 个文件摘要全部与原包一致。该候选包记录 `sourceDirty:true`，不用于公共发布。测试后已卸载临时 Homebrew 包、移除临时 Tap 并恢复原开发模式设置，原用户级 `0.1.0-dev.6` 安装保留。证据位于本机 `/private/tmp/agentsoma-distribution-acceptance-20260906`，不随发布包分发。此轮没有重新操作 iPhone，也未运行 GitHub 托管 CI。
+本地验收记录覆盖 Apple Silicon / macOS 15.0.1 / Xcode 16.0 / iPhone 12 Pro / iOS 26.6，以及已有付费开发团队签名条件下的包校验、搬移、重签、重复 setup 和正常连接。原始设备记录、候选包、签名资料和日志保留在本地。CI 运行 Swift/Python 测试及发布包校验，没有物理 iPhone，不能替代真机验证。
 
 ## 尚未验收的发布条件
 

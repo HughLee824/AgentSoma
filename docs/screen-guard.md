@@ -1,6 +1,6 @@
 # 动作前画面校验与坐标执行
 
-用户在 2026-09-05 确认“按这个方向继续”。本阶段覆盖 tap/swipe：宿主根据原观察准备坐标和画面指纹，Runner 重新截图并校验，通过后执行坐标手势。type/press 的 AX 目标解析、动作后的精确帧稳定检测、每次派发后重新 observe、unknown 不重发均保持不变。
+画面校验覆盖 tap/swipe：宿主根据原观察准备坐标和画面指纹，Runner 重新截图并校验，通过后执行坐标手势。type/press 的 AX 目标解析、动作后的精确帧稳定检测、每次派发后重新 observe、unknown 不重发均保持不变。
 
 这是启发式的动作前置条件，不是页面 ID、目标身份保证、业务正确性或事务隔离。每次 observe 仍产生新引用；相似画面不延长引用，也不合并观察。
 
@@ -46,7 +46,7 @@ agentsoma --session "$SESSION" tap o6:e10 --max-screen-change 0.01 --max-region-
 - 参数、坐标、保护引用不合法：宿主或 Runner 拒绝，不发送输入。
 - 输入后的失败、丢失响应、画面不稳定：沿用 unknown 和不重发规则，不把动作前的通过证据当成动作完成。
 
-设备协议现在是 observationVersion=2、actionVersion=5、screenGuardVersion=1、frameStabilityVersion=1。actionVersion=5 增加显式滑动速度与两端停留，见 [可控拖动](actions.md#可控拖动)。旧 Runner 在 connect 时返回 runner_needs_rebuild，必须重新 build-runner，不静默忽略新参数或回退到无校验坐标输入。
+设备协议现在是 observationVersion=2、actionVersion=5、screenGuardVersion=1、frameStabilityVersion=1。actionVersion=5 增加显式滑动速度与两端停留，见 [可控拖动](actions.md#可控拖动)。旧 Runner 在 connect 时返回 runner_needs_rebuild，发布用户需要安装配套 Runner 并 setup，源码开发者需要重新 build-runner，不静默忽略新参数或回退到无校验坐标输入。
 
 ## 验证边界与剩余风险
 
@@ -57,18 +57,3 @@ agentsoma --session "$SESSION" tap o6:e10 --max-screen-change 0.01 --max-region-
 降采样可能遗漏细小文字或局部变化；大区域内的小变化也可能被稀释。不可访问的遮挡、无可见变化的 enabled/focus 更新、相同画面背后的业务状态变化不能仅靠截图保证。坐标 tap 不再承诺旧 AX 路径的 live enabled/isHittable 检查。需要精确命中时使用明确坐标，重要上下文由调用方保护并在动作后检查。
 
 AX 与截图的 observe 采集不是原子的，动作前采样与触摸也不是原子的。此校验不会冻结 App，也不承诺检测所有输入前变化。若后续要为动作后稳定检测加入相似容差，需要独立的固定窗口基准规则，不能把相邻帧小幅变化误判成停止运动。
-
-## 2026-09-05 有界真机验收
-
-环境：macOS 15.0.1 / Xcode 16.0 / iPhone 12 Pro、iOS 26.6，现有 AgentSoma Fixture；没有操作 Lark 内容。独立 Runner 的 iOS 编译及现有开发签名验证通过。本地回归共 63 项，0 失败。
-
-同一 Runner 会话进行了 7 次观察和 6 个动作：5 次 completed、1 次预期的输入前拦截，没有 unknown 或重放。所有阈值保持默认值。
-
-- Increment 由 Count 0 变为 1；带额外 Mutable B 保护区域的点击随后由 Count 1 变为 2，Submissions 始终为 0。
-- Fixture 定时将 Mutable A 改为 Mutable B。旧观察的按钮点击返回 screen_changed：screenChange=0.0009765625（约 0.098%，低于整屏 1%），regionChanges=[0.0182291667]（约 1.823%，高于局部 0）。execution.started=false，重新 observe 的 Count 仍为 1，没有触发按钮的 +100 行为。
-- 正常动作也出现过非零整屏变化（0.00048828125、0.00146484375），局部变化为 0，仍正常通过。此证据说明阈值确实应用于放行，不将变化原因推断为特定通知或时钟。
-- 明确端点 (195,650)→(195,520) 的手势使列表由 0% 滚到 19%；截图确认首个可见行由 Row 0 变为 Row 6。元素引用的向下手势随后回到 0%。手指距离不等于列表内容位移，滚动有惯性。
-- 三次成功 tap 的 Runner 总耗时约 1.75–1.90 秒；输入前拒绝约 0.39 秒；两次 swipe 分别约 25.96 秒和 2.73 秒。前者在进入 XCTest 手势之后有长等待，不能据此宣称本次改动已消除 XCTest 输入/截图等待。未单独测量图像比较 CPU 耗时，也不提供 p95 性能保证。
-- disconnect 返回 shutdownAcknowledged=true、forced=false、xcodebuildExitCode=0，并清理观察缓存。持续 XCTest 会话 1 通过、0 失败。相关截图已另存，不依赖已清理的会话缓存。
-
-本地证据（Git 忽略）：`spikes/ios-xctest/evidence/screen-guard-20260905.Uv9lt0/`，包含 CLI 回执、o3–o7 的截图/AX、最终动作帧、构建路径、测试与 Runner 日志。未在真实 Lark 日期滚轮上做此版本的操作验收，未新增权限弹窗、屏幕旋转或真机焦点切换测试；这些不应被上述通过结果覆盖。
