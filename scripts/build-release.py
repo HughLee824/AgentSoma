@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Maintainer-only: build a relocatable, unsigned release candidate. Never publishes."""
+"""Maintainer-only: build a relocatable CLI and unsigned iOS Runner. Never publishes."""
 
 import argparse
 import hashlib
@@ -12,6 +12,8 @@ import subprocess
 import tarfile
 import tempfile
 from pathlib import Path
+
+from release_artifact import VERSION_PATTERN, inspect_archive
 
 
 def run(arguments, *, cwd, log=None):
@@ -90,25 +92,35 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--version", required=True, help="Explicit release version, e.g. 0.1.0-dev.1")
     parser.add_argument("--output-dir", type=Path, help="Default: .build/releases")
+    parser.add_argument("--require-clean", action="store_true", help="Require a clean committed source checkout")
     args = parser.parse_args()
-    if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?", args.version):
+    if not re.fullmatch(VERSION_PATTERN, args.version):
         parser.error("Use a semantic version without a leading v")
     architecture = platform.machine()
     if platform.system() != "Darwin" or architecture not in ("arm64", "x86_64"):
         parser.error("Build on macOS using an arm64 or x86_64 host")
     root = Path(__file__).resolve().parents[1]
+    commit = run(["git", "rev-parse", "HEAD"], cwd=root)
+    dirty = bool(run(["git", "status", "--porcelain"], cwd=root))
+    if args.require_clean and dirty:
+        parser.error("Commit source changes before building a public release")
+    if not (root / "LICENSE").is_file():
+        parser.error("The project LICENSE is required in every release")
     output = (args.output_dir or root / ".build/releases").resolve()
     output.mkdir(parents=True, exist_ok=True)
     name = f"agentsoma-{args.version}-macos-{architecture}"
     destination = output / name
     archive = output / f"{name}.tar.gz"
-    if destination.exists() or archive.exists():
+    checksum = output / f"{archive.name}.sha256"
+    if destination.exists() or archive.exists() or checksum.exists():
         parser.error("Output already exists; use another version or output directory")
     log = output / f"{name}-build.log"
     run(["swift", "build", "-c", "release"], cwd=root, log=log)
     bin_path = Path(run(["swift", "build", "-c", "release", "--show-bin-path"], cwd=root))
     # Isolated builds keep development Runner products and active sessions untouched.
-    with tempfile.TemporaryDirectory(prefix="release-runner-", dir=root / ".build") as temporary:
+    with tempfile.TemporaryDirectory(prefix=".release-", dir=output) as staging, \
+            tempfile.TemporaryDirectory(prefix="release-runner-", dir=root / ".build") as temporary:
+        staged = Path(staging) / name
         runner_log = output / f"{name}-runner-build.log"
         run(["xcrun", "xcodebuild", "build-for-testing", "-project", "Runner/AgentSomaRunner.xcodeproj",
              "-scheme", "AgentSomaRunner", "-configuration", "Debug", "-sdk", "iphoneos",
@@ -117,32 +129,44 @@ def main():
              "SWIFT_OPTIMIZATION_LEVEL=-O", "SWIFT_ACTIVE_COMPILATION_CONDITIONS=",
              "DEBUG_INFORMATION_FORMAT=dwarf-with-dsym", "SWIFT_SERIALIZE_DEBUGGING_OPTIONS=NO"],
             cwd=root, log=runner_log)
-        (destination / "bin").mkdir(parents=True)
-        shutil.copy2(bin_path / "agentsoma", destination / "bin/agentsoma")
-        run(["/usr/bin/strip", "-S", str(destination / "bin/agentsoma")], cwd=root)
+        (staged / "bin").mkdir(parents=True)
+        shutil.copy2(bin_path / "agentsoma", staged / "bin/agentsoma")
+        run(["/usr/bin/strip", "-S", str(staged / "bin/agentsoma")], cwd=root)
         # Ad-hoc signing keeps the local arm64 binary executable; this is not Developer ID signing.
-        run(["/usr/bin/codesign", "--force", "--sign", "-", "--timestamp=none", str(destination / "bin/agentsoma")], cwd=root)
-        runner = destination / "libexec/agentsoma/runner"
+        run(["/usr/bin/codesign", "--force", "--sign", "-", "--timestamp=none", str(staged / "bin/agentsoma")], cwd=root)
+        runner = staged / "libexec/agentsoma/runner"
         runner.mkdir(parents=True)
         files, minimum_os = package_runner(Path(temporary) / "Build/Products", runner)
-        for path in [destination / "bin/agentsoma", *(runner / name for name in files)]:
+        for path in [staged / "bin/agentsoma", *(runner / name for name in files)]:
             if str(root).encode() in path.read_bytes():
-                raise RuntimeError(f"Local source path leaked into release payload: {path.relative_to(destination)}")
+                raise RuntimeError(f"Local source path leaked into release payload: {path.relative_to(staged)}")
         runner_version = hashlib.sha256(json.dumps(files, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
         (runner / "manifest.json").write_text(json.dumps({
-            "formatVersion": 1, "releaseVersion": args.version, "cliSHA256": digest(destination / "bin/agentsoma"), "runnerVersion": runner_version,
+            "formatVersion": 1, "releaseVersion": args.version, "cliSHA256": digest(staged / "bin/agentsoma"), "runnerVersion": runner_version,
             "minimumOSVersion": minimum_os, "files": files,
         }, indent=2, sort_keys=True) + "\n")
-    shutil.copy2(root / "docs/install.md", destination / "README.md")
-    for source in root.glob("LICENSE*"):
-        if source.is_file():
-            shutil.copy2(source, destination / source.name)
-    with tarfile.open(archive, "w:gz") as tar:
-        tar.add(destination, arcname=name)
-    checksum = output / f"{archive.name}.sha256"
-    checksum.write_text(f"{digest(archive)}  {archive.name}\n")
+        shutil.copy2(root / "docs/install.md", staged / "README.md")
+        shutil.copy2(root / "LICENSE", staged / "LICENSE")
+        (staged / "licenses").mkdir()
+        shutil.copy2(root / ".build/checkouts/swift-argument-parser/LICENSE.txt", staged / "licenses/SwiftArgumentParser.txt")
+        (staged / "build-info.json").write_text(json.dumps({
+            "version": args.version, "architecture": architecture, "license": "MIT",
+            "sourceCommit": commit, "sourceDirty": dirty,
+            "xcode": run(["xcodebuild", "-version"], cwd=root),
+            "swift": run(["swift", "--version"], cwd=root),
+        }, indent=2, sort_keys=True) + "\n")
+        if args.require_clean and (run(["git", "rev-parse", "HEAD"], cwd=root) != commit
+                                   or run(["git", "status", "--porcelain"], cwd=root)):
+            raise RuntimeError("Source checkout changed while building the release")
+        staged_archive = Path(staging) / archive.name
+        with tarfile.open(staged_archive, "w:gz") as tar:
+            tar.add(staged, arcname=name)
+        inspect_archive(staged_archive, require_clean=args.require_clean)
+        staged.rename(destination)
+        staged_archive.rename(archive)
+        checksum.write_text(f"{digest(archive)}  {archive.name}\n")
     print(json.dumps({"directory": str(destination), "archive": str(archive), "checksum": str(checksum),
-                      "runnerVersion": runner_version, "macSigning": "not performed", "published": False}))
+                      "runnerVersion": runner_version, "macSigning": "ad-hoc", "notarized": False, "published": False}))
 
 
 if __name__ == "__main__":

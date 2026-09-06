@@ -1,0 +1,102 @@
+name: Draft release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'New version without v (for example, 0.1.0-rc.1)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.repository == 'HughLee824/AgentSoma' && github.ref == 'refs/heads/main'
+    runs-on: macos-15
+    timeout-minutes: 30
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_16.app/Contents/Developer
+      VERSION: ${{ inputs.version }}
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+      HOMEBREW_NO_INSTALL_CLEANUP: '1'
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - run: swift test
+      - run: python3 -m unittest discover -s scripts/tests -v
+      - name: Build and verify the exact archive
+        run: |
+          python3 scripts/build-release.py --version "$VERSION" --require-clean
+          python3 scripts/verify-release.py ".build/releases/agentsoma-${VERSION}-macos-arm64.tar.gz" --require-clean
+      - name: Verify Homebrew installation preserves the CLI and Runner
+        run: |
+          python3 scripts/generate-homebrew.py ".build/releases/agentsoma-${VERSION}-macos-arm64.tar.gz" --local --output "$RUNNER_TEMP/agentsoma.rb"
+          ruby -c "$RUNNER_TEMP/agentsoma.rb"
+          brew tap-new agentsoma/acceptance
+          cp "$RUNNER_TEMP/agentsoma.rb" "$(brew --repository agentsoma/acceptance)/Formula/agentsoma.rb"
+          brew install agentsoma/acceptance/agentsoma
+          brew test agentsoma/acceptance/agentsoma
+      - name: Generate the public formula
+        run: python3 scripts/generate-homebrew.py ".build/releases/agentsoma-${VERSION}-macos-arm64.tar.gz" --output .build/releases/agentsoma.rb
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: release-assets
+          if-no-files-found: error
+          retention-days: 7
+          path: |
+            .build/releases/*.tar.gz
+            .build/releases/*.tar.gz.sha256
+            .build/releases/agentsoma.rb
+
+  draft:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      VERSION: ${{ inputs.version }}
+      SOURCE_COMMIT: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: release-assets
+          path: release-assets
+      - name: Check downloaded artifacts and refuse an existing tag
+        run: |
+          python3 scripts/verify-release.py "release-assets/agentsoma-${VERSION}-macos-arm64.tar.gz" --require-clean --no-execute
+          python3 scripts/generate-homebrew.py "release-assets/agentsoma-${VERSION}-macos-arm64.tar.gz" --output "$RUNNER_TEMP/agentsoma.rb"
+          cmp "$RUNNER_TEMP/agentsoma.rb" release-assets/agentsoma.rb
+          existing=$(git ls-remote --tags origin "refs/tags/v${VERSION}")
+          if [ -n "$existing" ]; then
+            echo 'This tag already exists; use a new release version.' >&2
+            exit 1
+          fi
+      - name: Create a draft with all assets attached
+        run: |
+          cat > "$RUNNER_TEMP/release-notes.md" <<'EOF'
+          Precompiled macOS CLI and iOS Runner for Apple Silicon, under the MIT license.
+
+          Download the tar.gz and its .sha256 file together. Installation and iPhone setup instructions are in the package README and repository docs/install.md.
+
+          Device setup requires full Xcode and your own Apple development certificate, private key and matching provisioning profile. Setup re-signs the precompiled Runner locally. Free Personal Team onboarding and renewal are not yet validated.
+
+          CI verifies Swift tests, package integrity, relocation and Homebrew installation. CI has no physical iPhone; device compatibility is documented separately in docs/release-setup.md. The Mac CLI is ad-hoc signed, without Developer ID signing or notarization.
+
+          Maintainer: review this draft, then publish it. After publication, run the Homebrew Tap's Update AgentSoma workflow with the same version. The attached agentsoma.rb contains the exact versioned download URL and archive checksum.
+          EOF
+          flags=()
+          if [[ "$VERSION" == *-* ]]; then flags+=(--prerelease); fi
+          gh release create "v${VERSION}" release-assets/* --target "$SOURCE_COMMIT" --draft "${flags[@]}" --title "AgentSoma ${VERSION}" --notes-file "$RUNNER_TEMP/release-notes.md"

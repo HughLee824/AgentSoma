@@ -1,0 +1,201 @@
+import importlib.util
+import io
+import json
+import plistlib
+import re
+import subprocess
+import sys
+import tarfile
+import tempfile
+import unittest
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from release_artifact import RUNNER, VERSION_PATTERN, check_checksum, inspect_archive, sha256
+
+spec = importlib.util.spec_from_file_location("homebrew", Path(__file__).resolve().parents[1] / "generate-homebrew.py")
+homebrew = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(homebrew)
+
+
+class ReleaseTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory(prefix="agentsoma test ")
+        self.addCleanup(self.temporary.cleanup)
+        self.version = "0.1.0-rc.1"
+        self.archive = Path(self.temporary.name) / f"agentsoma-{self.version}-macos-arm64.tar.gz"
+        self.root = self.archive.name.removesuffix(".tar.gz")
+        self.runner = {
+            "AgentSomaRunner.app/Info.plist": plistlib.dumps({"MinimumOSVersion": "17.0"}),
+            "AgentSomaRunner.app/AgentSomaTests-Runner": b"runner binary",
+            "AgentSomaRunner.app/PlugIns/AgentSomaTests.xctest/AgentSomaTests": b"test binary",
+            "Runner.xctestrun": plistlib.dumps({"AgentSomaTests": {
+                "TestHostPath": "__TESTROOT__/AgentSomaRunner.app",
+                "TestBundlePath": "__TESTHOST__/PlugIns/AgentSomaTests.xctest",
+                "UseUITargetAppProvidedByTests": True,
+                "DependentProductPaths": ["__TESTROOT__/AgentSomaRunner.app",
+                    "__TESTROOT__/AgentSomaRunner.app/PlugIns/AgentSomaTests.xctest"],
+            }}),
+        }
+        self.build = {"version": self.version, "architecture": "arm64", "license": "MIT",
+                      "sourceCommit": "a" * 40, "sourceDirty": False}
+
+    def write_archive(self, *, modify_files=None, modify_manifest=None, extra_members=()):
+        inventory = {name: sha256(data) for name, data in self.runner.items()}
+        manifest = {"formatVersion": 1, "releaseVersion": self.version,
+                    "cliSHA256": sha256(b"CLI"), "minimumOSVersion": "17.0", "files": inventory,
+                    "runnerVersion": sha256(json.dumps(inventory, sort_keys=True, separators=(",", ":")).encode())}
+        if modify_manifest:
+            modify_manifest(manifest)
+        files = {"bin/agentsoma": b"CLI", "README.md": b"install", "LICENSE": b"MIT",
+                 "licenses/SwiftArgumentParser.txt": b"dependency licence",
+                 "build-info.json": json.dumps(self.build).encode(),
+                 RUNNER + "manifest.json": json.dumps(manifest).encode(),
+                 **{RUNNER + name: data for name, data in self.runner.items()}}
+        if modify_files:
+            modify_files(files)
+        with tarfile.open(self.archive, "w:gz") as tar:
+            for name, data in files.items():
+                member = tarfile.TarInfo(f"{self.root}/{name}")
+                member.size = len(data)
+                tar.addfile(member, io.BytesIO(data))
+            for member in extra_members:
+                tar.addfile(member, io.BytesIO(b""))
+        Path(str(self.archive) + ".sha256").write_text(f"{sha256(self.archive.read_bytes())}  {self.archive.name}\n")
+
+    def test_valid_release_and_checksum(self):
+        self.write_archive()
+        check_checksum(self.archive)
+        release = inspect_archive(self.archive, require_clean=True)
+        self.assertEqual(release["version"], self.version)
+        self.assertEqual(release["build"]["sourceCommit"], "a" * 40)
+
+    def test_version_syntax(self):
+        for version in ["0.1.0", "1.2.3-rc.1", "1.2.3-dev.0"]:
+            self.assertIsNotNone(re.fullmatch(VERSION_PATTERN, version))
+        for version in ["v0.1.0", "01.0.0", "1.2.3-01", "1.2.3-a..b", "1.2.3-", "1.2.3/x"]:
+            self.assertIsNone(re.fullmatch(VERSION_PATTERN, version))
+
+    def test_checksum_must_name_the_same_file_and_bytes(self):
+        self.write_archive()
+        checksum = Path(str(self.archive) + ".sha256")
+        for text in [f'{sha256(self.archive.read_bytes())}  wrong.tar.gz', f'{"0" * 64}  {self.archive.name}']:
+            checksum.write_text(text)
+            with self.assertRaisesRegex(ValueError, "SHA-256"):
+                check_checksum(self.archive)
+
+    def test_dirty_source_allowed_locally_but_not_publicly(self):
+        self.build["sourceDirty"] = True
+        self.write_archive()
+        inspect_archive(self.archive)
+        with self.assertRaisesRegex(ValueError, "clean checkout"):
+            inspect_archive(self.archive, require_clean=True)
+
+    def test_source_metadata_is_required(self):
+        for key, value in [("sourceCommit", "main"), ("sourceDirty", "false"),
+                           ("architecture", "x86_64"), ("license", "unknown"), ("version", "9.9.9")]:
+            with self.subTest(key=key):
+                saved = self.build[key]
+                self.build[key] = value
+                self.write_archive()
+                with self.assertRaises(ValueError):
+                    inspect_archive(self.archive)
+                self.build[key] = saved
+
+    def test_cli_and_runner_tampering_rejected(self):
+        for name in ["bin/agentsoma", RUNNER + "AgentSomaRunner.app/AgentSomaTests-Runner"]:
+            with self.subTest(name=name):
+                self.write_archive(modify_files=lambda files: files.update({name: b"changed"}))
+                with self.assertRaises(ValueError):
+                    inspect_archive(self.archive)
+
+    def test_missing_license_rejected(self):
+        for name in ["LICENSE", "licenses/SwiftArgumentParser.txt"]:
+            self.write_archive(modify_files=lambda files: files.pop(name))
+            with self.assertRaisesRegex(ValueError, "missing"):
+                inspect_archive(self.archive)
+
+    def test_incomplete_but_consistently_hashed_runner_rejected(self):
+        self.runner.pop("AgentSomaRunner.app/AgentSomaTests-Runner")
+        self.write_archive()
+        with self.assertRaisesRegex(ValueError, "incomplete"):
+            inspect_archive(self.archive)
+
+    def test_manifest_versions_and_content_id_must_match(self):
+        for key, value in [("formatVersion", 2), ("releaseVersion", "9.9.9"),
+                           ("runnerVersion", "0" * 64), ("minimumOSVersion", "next")]:
+            self.write_archive(modify_manifest=lambda manifest: manifest.update({key: value}))
+            with self.assertRaises(ValueError):
+                inspect_archive(self.archive)
+
+    def test_signing_profiles_frameworks_and_source_rejected_even_with_matching_hashes(self):
+        for name in ["AgentSomaRunner.app/embedded.mobileprovision", "AgentSomaRunner.app/Frameworks/XCTest.framework/XCTest",
+                     "source.swift", "Runner.dSYM/Contents/Resources/DWARF/Runner"]:
+            self.runner[name] = b"must not ship"
+            self.write_archive()
+            with self.assertRaisesRegex(ValueError, "signing profiles"):
+                inspect_archive(self.archive)
+            self.runner.pop(name)
+
+    def test_external_test_manifest_path_rejected(self):
+        plan = plistlib.loads(self.runner["Runner.xctestrun"])
+        plan["AgentSomaTests"]["TestHostPath"] = "/private/local/Runner.app"
+        self.runner["Runner.xctestrun"] = plistlib.dumps(plan)
+        self.write_archive()
+        with self.assertRaisesRegex(ValueError, "packaged app"):
+            inspect_archive(self.archive)
+
+    def test_unsafe_tar_members_rejected_before_extraction(self):
+        for name in ["/tmp/escape", f"{self.root}/../escape", f"{self.root}/./extra",
+                     f"{self.root}//extra", "", "another-root/file", f"{self.root}/bin/agentsoma"]:
+            with self.subTest(name=name):
+                self.write_archive(extra_members=[tarfile.TarInfo(name)])
+                with self.assertRaises(ValueError):
+                    inspect_archive(self.archive)
+        for kind in [tarfile.SYMTYPE, tarfile.LNKTYPE, tarfile.FIFOTYPE, tarfile.CHRTYPE]:
+            member = tarfile.TarInfo(f"{self.root}/link")
+            member.type, member.linkname = kind, "/tmp/escape"
+            self.write_archive(extra_members=[member])
+            with self.assertRaisesRegex(ValueError, "link, special file"):
+                inspect_archive(self.archive)
+
+    def test_unexpected_payload_outside_runner_rejected(self):
+        self.write_archive(modify_files=lambda files: files.update({"private.mobileprovision": b"private"}))
+        with self.assertRaisesRegex(ValueError, "unexpected file"):
+            inspect_archive(self.archive)
+
+    def test_formula_uses_immutable_version_url_and_preserves_resource_layout(self):
+        self.write_archive()
+        output = Path(self.temporary.name) / "Formula/agentsoma.rb"
+        subprocess.run([sys.executable, str(Path(homebrew.__file__)), str(self.archive), "--output", str(output)],
+                       check=True, capture_output=True)
+        formula = output.read_text()
+        self.assertIn(f"/releases/download/v{self.version}/{self.archive.name}", formula)
+        self.assertIn(sha256(self.archive.read_bytes()), formula)
+        self.assertIn('libexec.install "bin", "libexec"', formula)
+        self.assertIn('bin.install_symlink libexec/"bin/agentsoma"', formula)
+        self.assertNotIn("latest/download", formula)
+
+    def test_public_formula_rejects_dirty_candidate_but_local_test_can_install_it(self):
+        self.build["sourceDirty"] = True
+        self.write_archive()
+        output = Path(self.temporary.name) / "agentsoma.rb"
+        command = [sys.executable, str(Path(homebrew.__file__)), str(self.archive), "--output", str(output)]
+        self.assertNotEqual(subprocess.run(command, capture_output=True).returncode, 0)
+        self.assertFalse(output.exists())
+        subprocess.run([*command, "--local"], check=True, capture_output=True)
+        self.assertIn("file://", output.read_text())
+
+    def test_formula_rejects_untested_architecture_and_ruby_interpolation(self):
+        self.write_archive()
+        release = inspect_archive(self.archive)
+        for url in ["file:///tmp/#{danger}.tar.gz", "file:///tmp/#@danger.tar.gz", "file:///tmp/#$danger.tar.gz"]:
+            with self.assertRaises(ValueError):
+                homebrew.formula_for(release, url)
+        release["architecture"] = "x86_64"
+        with self.assertRaisesRegex(ValueError, "Apple Silicon"):
+            homebrew.formula_for(release, "https://example.com/release.tar.gz")
+
+
+if __name__ == "__main__":
+    unittest.main()

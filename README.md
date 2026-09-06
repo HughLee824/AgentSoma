@@ -12,7 +12,9 @@ agent → agentsoma CLI → 按会话运行的 Swift 宿主 → CoreDevice IPv6 
 
 当前开发环境为 macOS 15.0.1、Xcode 16.0 / Swift 6.0，真机为 iOS 26.6。Swift 包的 macOS 13 部署目标是编译下限，尚不代表完整设备链路在 macOS 13 上经过验证。
 
-当前可生成本地发布候选包，尚未发布公共下载版本。安装时解压完整目录，将其中 `bin` 加入 PATH；保留相邻的 `libexec`，也可为 `bin/agentsoma` 创建软链接。用户运行不需要源码仓库、Swift Package Manager、Python、Node、iproxy 或 pymobiledevice3。打包步骤和发布边界见 [Release 与 setup](docs/release-setup.md)。
+分发渠道为 [GitHub Releases](https://github.com/HughLee824/AgentSoma/releases) 和 [Homebrew Tap](https://github.com/HughLee824/homebrew-tap)，采用 MIT 许可证。当前正在准备首次公共发布；稳定版 Release 与 Tap 更新后，可用 `brew install HughLee824/tap/agentsoma` 安装。也可下载同一 Release 的 tar.gz 和 SHA-256 文件，校验后解压完整目录。首批预编译包面向 Apple Silicon / macOS 15 及以上。
+
+安装、升级和卸载步骤见[安装说明](docs/install.md)。用户运行不需要源码仓库、Swift Package Manager、Python、Node、iproxy 或 pymobiledevice3。维护者的构建、发布草稿和 Tap 更新流程见 [Release 与 setup](docs/release-setup.md)。
 
 首次使用仍需完整 Xcode、可用的 Apple Development 私钥及匹配 iPhone 的 development profile，并让设备信任 Mac、启用 Developer Mode。`setup` 只重签预编译 Runner，不编译源码，也不登录 Apple 账号。具体步骤与签名准备见[首次接入](docs/onboarding.md)。以下命令由外部 agent 执行：
 
