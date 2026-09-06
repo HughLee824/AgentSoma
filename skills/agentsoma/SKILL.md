@@ -12,7 +12,7 @@ Use the local `agentsoma` CLI for iPhone observation and input. The calling agen
 - Start with `agentsoma devices`; use the device ID it returns. Desktop computer-use tools do not control this iPhone. Discover the app with `apps --query` using the user's app name, then use the returned bundle ID; do not guess a macOS bundle ID or substitute a similarly named app.
 - For a new session, use `agentsoma connect --device DEVICE_ID`. Reuse an existing session only when it belongs to the current task and `status` confirms it is ready. Keep the returned AgentSoma session ID in subsequent calls.
 - Follow `setup_required` / `setup_update_required` with the indicated `agentsoma setup --device DEVICE_ID`, using existing signing configuration, then connect again. Use a supplied signed `.xctestrun` for an explicitly chosen source workflow. Do not rebuild Runner or search signing directories for every task.
-- A `coredevice_initialization_timeout` does not establish a disconnected phone. Follow its diagnostic: compare read-only device discovery once in an approved host execution context before repeating commands or restarting services. Keep the execution environment consistent once it works.
+- A `coredevice_initialization_timeout` does not establish a disconnected phone. Follow its diagnostic: compare read-only device discovery once in an approved host execution context before repeating commands or restarting services. Keep the execution environment consistent once it works. Recover CLI discovery or connection errors through the CLI and its diagnostics; switching to desktop computer-use discovery does not resolve iPhone access.
 
 ## Keep command completion visible
 
@@ -42,5 +42,7 @@ For an already authorized, selected action, use `--observe` when the installed c
 ## Finish the user's task
 
 Preserve the requested operation and object: creating an item does not authorize replacing a similar existing item. Before saving, verify the requested fields, including both dates, times, and timezone for a calendar task. Continue within existing authorization; ask only for missing consequential information or a required permission.
+
+For example, a request to create, save, reopen, verify, and delete a test calendar event authorizes that sequence for the newly created event. Once its identity and fields are verified, continue through Save and the app's delete confirmation without asking the user to repeat that authorization. An app confirmation dialog is a UI step, not by itself a new user-approval requirement. If an applicable higher-priority instruction or tool approval decision requires a separate permission, explain its source and the blocked action.
 
 Give brief progress updates during longer work, including time spent recovering from errors. After saving, observe and verify the resulting UI before reporting success. Describe material app defaults when relevant. End the task's session with `disconnect` and check the cleanup result. Report unresolved execution or verification failures accurately.

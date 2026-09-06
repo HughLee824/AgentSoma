@@ -15,6 +15,7 @@ const result = await tools.exec_command({
   max_output_tokens: 6000
 });
 text(result);
+store("agentsoma.execution", result);
 ```
 
 For example, text replacement uses these arguments in the same template:
@@ -29,16 +30,22 @@ If a tool-level permission error or the CoreDevice diagnostic requires host exec
 
 ## Continue the same command
 
-When the result has a background `session_id`, use its actual numeric value below. This is **not** the AgentSoma session string. Repeat continuation only while the tool reports the same command is still running; consume each output chunk.
+When the result has a background `session_id`, use its actual numeric value below. This is **not** the AgentSoma session string. Repeat continuation only while the tool reports the same command is still running. These templates retain output chunks in `store` for the result reader; finish and read this command before starting another, which replaces that stored result.
 
 ```javascript
+const sessionId = 12345;
+const previous = load("agentsoma.execution");
+if (previous?.session_id !== sessionId || Number.isInteger(previous.exit_code)) {
+  throw new Error("Use the running command's execution session ID");
+}
 const result = await tools.write_stdin({
-  session_id: 12345,
+  session_id: sessionId,
   chars: "",
   yield_time_ms: 10000,
   max_output_tokens: 6000
 });
 text(result);
+store("agentsoma.execution", {...result, output: (previous.output ?? "") + (result.output ?? "")});
 ```
 
 If `functions.exec` itself reports a running cell ID, resume that cell with its `wait` tool first. Do not re-execute the original script. Keep individual waits short enough to provide progress updates.
@@ -49,3 +56,23 @@ If `functions.exec` itself reports a running cell ID, resume that cell with its 
 - An exit code means that shell process ended. Read its output and any AgentSoma `outcome` together; exit code zero does not establish the user's business result.
 - `unknown` means input may have happened. Acquire a fresh observation before deciding what to do next. Do not use `action && observe` as an unconditional recovery template: a nonzero action exit can still need observation.
 - A JavaScript syntax error before the execution tool was called did not reach AgentSoma. Correct the wrapper. Do not classify it as a device failure.
+
+## Read a completed `--observe` result
+
+After running an already selected action with `--observe` through the templates above, run this reader in `functions.exec`. It uses the accumulated output and does not issue device input. Read `action` and `observation` separately: an `unknown` action or a guard rejection can return top-level `ok: false` with a successful fresh observation. In that case the PNG still needs to be opened and checked alongside the returned text and references.
+
+```javascript
+const execution = load("agentsoma.execution");
+if (!Number.isInteger(execution?.exit_code)) {
+  text({pending: true, execution});
+} else {
+  const reply = JSON.parse(execution.output);
+  text({exit_code: execution.exit_code, ...reply});
+  if (reply.observation?.ok === true) {
+    const screenshot = await tools.view_image({path: reply.observation.result.screenshot});
+    image(screenshot.image_url);
+  }
+}
+```
+
+A screenshot path in JSON does not mean the image was read. Inspect the emitted image and verify the intended UI result before another input. If parsing or image loading fails, retain the printed command/action facts and resolve that reading failure; do not replay the action. A failed or skipped observation supplies no fresh screenshot; follow its error and reference validity before proceeding.

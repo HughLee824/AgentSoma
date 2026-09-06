@@ -9,10 +9,14 @@ function blocks(path) {
   return [...readFileSync(new URL(path, root), 'utf8').matchAll(/```javascript\n([\s\S]*?)```/g)]
     .map(match => match[1]);
 }
-const [start, resume] = blocks('skills/agentsoma/references/codex-calls.md');
+const [start, resume, readObservation] = blocks('skills/agentsoma/references/codex-calls.md');
 const [combined] = blocks('skills/agentsoma/references/action-observation.md');
 const session = 'test-session';
 const observed = {exit_code: 0, output: 'observation=o2 refs=current\nscreenshot="/fixture/screen.png"\n'};
+function memory(initial) {
+  const values = new Map([['agentsoma.execution', initial]]);
+  return {store: (key, value) => values.set(key, value), load: key => values.get(key)};
+}
 function reply(outcome, fields = {}) {
   return {exit_code: outcome === 'completed' ? 0 : 1,
     output: JSON.stringify({session, ok: outcome === 'completed', outcome, ...fields})};
@@ -46,28 +50,94 @@ test('basic template preserves literal shell arguments and the background handle
   for (const value of values) {
     const pending = {output: 'partial', session_id: 42};
     const output = [];
+    const state = memory();
     const code = start.replace('const argv = ["agentsoma", "devices"];',
       `const argv = ${JSON.stringify(['/usr/bin/printf', '%s', value])};`);
-    await new AsyncFunction('tools', 'text', code)({exec_command: async options => {
+    await new AsyncFunction('tools', 'text', 'store', code)({exec_command: async options => {
       assert.equal(execFileSync('/bin/sh', ['-c', options.cmd], {encoding: 'utf8'}), value);
       return pending;
-    }}, value => output.push(value));
+    }}, value => output.push(value), state.store);
     assert.strictEqual(output[0], pending);
+    assert.strictEqual(state.load('agentsoma.execution'), pending);
   }
 });
 
 test('basic continuation preserves pending, failed, and successful results', async () => {
   for (const result of [{output: 'partial', session_id: 12345}, reply('unknown'), reply('completed')]) {
     const output = [];
+    const state = memory({session_id: 12345, output: 'earlier chunk'});
     let calls = 0;
-    await new AsyncFunction('tools', 'text', resume)({write_stdin: async options => {
+    await new AsyncFunction('tools', 'text', 'store', 'load', resume)({write_stdin: async options => {
       calls++;
       assert.equal(options.session_id, 12345);
       assert.equal(options.chars, '');
       return result;
-    }}, value => output.push(value));
+    }}, value => output.push(value), state.store, state.load);
     assert.equal(calls, 1);
     assert.strictEqual(output[0], result);
+    assert.deepEqual(state.load('agentsoma.execution'), {...result, output: 'earlier chunk' + result.output});
+  }
+});
+
+test('continuation rejects stale or completed handles before polling', async () => {
+  for (const previous of [undefined, {session_id: 42}, {session_id: 12345, exit_code: 0}]) {
+    const state = memory(previous);
+    await assert.rejects(new AsyncFunction('tools', 'text', 'store', 'load', resume)(
+      {}, () => {}, state.store, state.load), /running command/);
+  }
+});
+
+test('observe reader opens successful captures even when the action fails', async () => {
+  for (const outcome of ['completed', 'unknown', 'not_dispatched']) {
+    const payload = {ok: outcome === 'completed', action: {outcome},
+      observation: {ok: true, result: {screenshot: '/fixture/screen.png', text: 'fresh refs'}}};
+    const output = [];
+    const images = [];
+    const execution = {exit_code: payload.ok ? 0 : 1, output: JSON.stringify(payload)};
+    const state = memory(execution);
+    await new AsyncFunction('tools', 'text', 'image', 'load', readObservation)({
+      view_image: async options => {
+        assert.equal(options.path, '/fixture/screen.png');
+        assert.deepEqual(output, [{exit_code: execution.exit_code, ...payload}]);
+        return {image_url: 'data:image/png;base64,fixture'};
+      }
+    }, value => output.push(value), value => images.push(value), state.load);
+    assert.deepEqual(images, ['data:image/png;base64,fixture']);
+  }
+});
+
+test('observe reader waits for full accumulated JSON and never repeats input', async () => {
+  const payload = {ok: true, action: {outcome: 'completed'},
+    observation: {ok: true, result: {screenshot: '/fixture/screen.png'}}};
+  const json = JSON.stringify(payload);
+  const state = memory();
+  const output = [];
+  const emit = value => output.push(value);
+  await new AsyncFunction('tools', 'text', 'store', start)({exec_command: async () =>
+    ({session_id: 12345, output: json.slice(0, 20)})}, emit, state.store);
+  const reader = new AsyncFunction('tools', 'text', 'image', 'load', readObservation);
+  await reader({}, emit, () => assert.fail('pending screenshot'), state.load);
+  assert.equal(output.at(-1).pending, true);
+  await new AsyncFunction('tools', 'text', 'store', 'load', resume)({write_stdin: async () =>
+    ({exit_code: 0, output: json.slice(20)})}, emit, state.store, state.load);
+  let images = 0;
+  await reader({view_image: async () => ({image_url: 'fixture'})}, emit, () => images++, state.load);
+  assert.equal(images, 1);
+  assert.equal(state.load('agentsoma.execution').output, json);
+});
+
+test('failed observations or image loading preserve action facts without device calls', async () => {
+  const reader = new AsyncFunction('tools', 'text', 'image', 'load', readObservation);
+  for (const observation of [{ok: false, error: {code: 'capture_failed'}}, {skipped: 'not_dispatched'},
+    {ok: true, result: {screenshot: '/missing.png'}}]) {
+    const payload = {ok: false, action: {outcome: 'unknown'}, observation};
+    const state = memory({exit_code: 1, output: JSON.stringify(payload)});
+    const output = [];
+    const reading = reader({view_image: async () => {throw new Error('image unavailable');}},
+      value => output.push(value), () => assert.fail('unexpected image'), state.load);
+    if (observation.ok) await assert.rejects(reading, /image unavailable/);
+    else await reading;
+    assert.deepEqual(output, [{exit_code: 1, ...payload}]);
   }
 });
 
