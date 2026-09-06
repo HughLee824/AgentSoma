@@ -9,6 +9,7 @@ struct DeviceAction {
     let coordinate: Bool
     let guardPolicy: ScreenGuard.Policy
     let protectedReferences: [ObservationReference]
+    let swipeMotion: SwipeMotion?
 
     init(operation: String, request: [String: Any]) throws {
         guard Self.operations.contains(operation) else { throw SomaError("invalid_action", "Unknown device action") }
@@ -37,6 +38,26 @@ struct DeviceAction {
                 throw SomaError("invalid_direction", "Direction must be up, down, left or right")
             }
             fields["direction"] = direction
+        }
+        if operation == "swipe" {
+            func control(_ key: String, fallback: Double) throws -> Double {
+                guard let raw = request[key] else { return fallback }
+                guard let value = Self.number(raw) else { throw SomaError("invalid_swipe_motion", "Swipe motion controls must be finite numbers") }
+                return value
+            }
+            let defaults = SwipeMotion()
+            let motion = try SwipeMotion(velocity: control("velocity", fallback: defaults.velocity),
+                pressDuration: control("pressDuration", fallback: defaults.pressDuration),
+                holdDuration: control("holdDuration", fallback: defaults.holdDuration))
+            guard motion.valid else {
+                throw SomaError("invalid_swipe_motion", "Require 0 < velocity <= 10000 and press/hold durations in 0...5 seconds")
+            }
+            swipeMotion = motion
+        } else {
+            guard ["velocity", "pressDuration", "holdDuration"].allSatisfy({ request[$0] == nil }) else {
+                throw SomaError("invalid_swipe_motion", "Motion controls apply only to swipe")
+            }
+            swipeMotion = nil
         }
         if operation == "type" {
             guard let mode = request["mode"] as? String, ["insert", "replace"].contains(mode) else {

@@ -161,7 +161,9 @@ struct Tap: ParsableCommand {
 }
 
 struct Swipe: ParsableCommand {
-    static let configuration = CommandConfiguration(abstract: "Swipe within a current element, or between observed screen points, after a screen guard.")
+    static let configuration = CommandConfiguration(
+        abstract: "Swipe or drag with explicit speed and holds after a screen guard.",
+        discussion: "For wheel adjustments, use observed endpoints, a slower --velocity (for example 100), and --hold-duration 0.2 before lifting. For drag-and-drop, add --press-duration (for example 0.5). These are starting values, not a one-row guarantee. Observe after every dispatched action, including no change, and verify the selected value; completed means input finished and the screen stabilized. Estimated motion is limited to 10 seconds.")
     @OptionGroup var options: SessionOptions
     @OptionGroup var screenGuard: ScreenGuardOptions
     @Argument(help: "Element reference with --direction; observation ID with explicit endpoints.") var reference: String
@@ -170,11 +172,15 @@ struct Swipe: ParsableCommand {
     @Option(help: "Start vertical screen point coordinate.") var fromY: Double?
     @Option(help: "End horizontal screen point coordinate.") var toX: Double?
     @Option(help: "End vertical screen point coordinate.") var toY: Double?
+    @Option(help: "Drag speed in XCTest pixels/second; 0 < value <= 10000, default 500.") var velocity: Double?
+    @Option(help: "Seconds to hold at the start BEFORE moving, not drag duration; 0...5, default 0.") var pressDuration: Double?
+    @Option(help: "Seconds to hold at the end BEFORE lifting; 0...5, default 0.") var holdDuration: Double?
     mutating func run() throws {
         let session = try options.requiredSession()
         var fields = screenGuard.fields
         fields["reference"] = reference; fields["direction"] = direction
         fields["fromX"] = fromX; fields["fromY"] = fromY; fields["toX"] = toX; fields["toY"] = toY
+        fields["velocity"] = velocity; fields["pressDuration"] = pressDuration; fields["holdDuration"] = holdDuration
         try output { try SessionClient.call(session: session, operation: "swipe", fields: fields) }
     }
 }

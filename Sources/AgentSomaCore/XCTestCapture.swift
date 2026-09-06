@@ -4,7 +4,8 @@ import ImageIO
 // Decode the Runner's selected snapshot attributes without parsing debugDescription.
 enum XCTestCapture {
     // Keep only the latest action frame; the observation cache clears this directory on disconnect.
-    static func actionResponse(_ response: [String: Any], directory: URL, expectedGuard: ScreenGuard? = nil) throws -> [String: Any] {
+    static func actionResponse(_ response: [String: Any], directory: URL, expectedGuard: ScreenGuard? = nil,
+                               expectedMotion: SwipeMotion? = nil) throws -> [String: Any] {
         var result = response["result"] as? [String: Any] ?? [:]
         result["execution"] = response["execution"]
         result["stability"] = response["stability"]
@@ -44,6 +45,13 @@ enum XCTestCapture {
                 }
             }
             if response["ok"] as? Bool == true {
+                if let expectedMotion {
+                    guard let raw = result["motion"] as? [String: Any],
+                          let actual = try? JSONDecoder().decode(SwipeMotion.self, from: jsonData(raw)),
+                          actual == expectedMotion else {
+                        throw SomaError("missing_swipe_motion_facts", "Runner did not confirm the requested swipe speed and holds; observe before deciding what to do next")
+                    }
+                }
                 guard execution?["inputCompleted"] as? Bool == true, stability?["stable"] as? Bool == true,
                       let frames = stability?["consecutiveFrames"] as? Int, frames >= 3,
                       let stableFor = stability?["stableForMs"] as? Double, stableFor >= FrameStability.stableDuration * 1000,

@@ -133,7 +133,7 @@ final class ScreenGuardTests: XCTestCase {
         let context = screenTestContext(), start = CGPoint(x: 100, y: 600), end = CGPoint(x: 100, y: 200)
         let rects = CoordinateGesture.actionRegions(start: start, end: end, screen: context.screen.cgRect)
         let baseline = try ScreenGuard(png: screenPNG(), context: context, rects: rects, policy: .init())
-        let gesture = CoordinateGesture(start: start, end: end, screenGuard: baseline)
+        let gesture = CoordinateGesture(start: start, end: end, screenGuard: baseline, motion: .init())
         XCTAssertNoThrow(try gesture.validate(kind: "swipe"))
         XCTAssertThrowsError(try gesture.validate(kind: "tap"))
         let changed = try screenPNG(patches: [(CGRect(x: 98, y: 390, width: 4, height: 20), [0, 0, 0])])
@@ -141,10 +141,49 @@ final class ScreenGuardTests: XCTestCase {
         XCTAssertEqual(checked.regionChanges[0], 0)
         XCTAssertGreaterThan(checked.regionChanges[1], 0)
         XCTAssertFalse(checked.accepted)
-        XCTAssertThrowsError(try CoordinateGesture(start: start, end: start, screenGuard: baseline).validate(kind: "swipe"))
-        XCTAssertThrowsError(try CoordinateGesture(start: start, end: CGPoint(x: 400, y: 200), screenGuard: baseline).validate(kind: "swipe"))
+        XCTAssertThrowsError(try CoordinateGesture(start: start, end: start, screenGuard: baseline, motion: .init()).validate(kind: "swipe"))
+        XCTAssertThrowsError(try CoordinateGesture(start: start, end: CGPoint(x: 400, y: 200), screenGuard: baseline, motion: .init()).validate(kind: "swipe"))
         let incomplete = try ScreenGuard(png: screenPNG(), context: context, rects: [rects[0]], policy: .init())
-        XCTAssertThrowsError(try CoordinateGesture(start: start, end: end, screenGuard: incomplete).validate(kind: "swipe"))
+        XCTAssertThrowsError(try CoordinateGesture(start: start, end: end, screenGuard: incomplete, motion: .init()).validate(kind: "swipe"))
+    }
+
+    func testSwipeMotionSurvivesBothTargetModesAndWireEncoding() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("swipe-motion-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let cache = ObservationCache(directory: directory)
+        _ = try cache.store(observationFixture())
+        let expected = SwipeMotion(velocity: 100.5, pressDuration: 0.25, holdDuration: 0.2)
+        for target: [String: Any] in [["reference": "o1:e1", "direction": "up"],
+            ["reference": "o1", "fromX": 98, "fromY": 385, "toX": 98, "toY": 337]] {
+            var request = target
+            request.merge(expected.result) { _, new in new }
+            let action = try DeviceAction(operation: "swipe", request: request)
+            let fields = try XCTestBackend.actionFields(action, target: cache.resolveTarget(for: action))
+            let raw = try XCTUnwrap(fields["gesture"] as? [String: Any])
+            let decoded = try JSONDecoder().decode(CoordinateGesture.self, from: jsonData(raw))
+            XCTAssertEqual(decoded.motion, expected)
+            XCTAssertNoThrow(try decoded.validate(kind: "swipe"))
+            XCTAssertThrowsError(try decoded.validate(kind: "tap"))
+            for invalid: Any in [NSNull(), ["velocity": 0, "pressDuration": 0, "holdDuration": 0],
+                                  ["velocity": 100, "pressDuration": 0, "holdDuration": 6]] {
+                var altered = raw
+                altered["motion"] = invalid
+                XCTAssertThrowsError(try JSONDecoder().decode(CoordinateGesture.self, from: jsonData(altered)).validate(kind: "swipe"))
+            }
+        }
+    }
+
+    func testSwipeBudgetIncludesHoldsAndScreenshotScale() throws {
+        let context = screenTestContext(), start = CGPoint(x: 98, y: 385), end = CGPoint(x: 98, y: 337)
+        let baseline = try ScreenGuard(png: screenPNG(width: 1170, height: 2532), context: context,
+            rects: CoordinateGesture.actionRegions(start: start, end: end, screen: context.screen.cgRect), policy: .init())
+        var gesture = CoordinateGesture(start: start, end: end, screenGuard: baseline,
+            motion: SwipeMotion(velocity: 18, pressDuration: 1, holdDuration: 1))
+        XCTAssertNoThrow(try gesture.validate(kind: "swipe")) // 48 * 3 / 18 + 1 + 1 = 10.
+        gesture.motion?.holdDuration = 1.01
+        XCTAssertThrowsError(try gesture.validate(kind: "swipe"))
+        gesture.motion = SwipeMotion(velocity: 10)
+        XCTAssertThrowsError(try gesture.validate(kind: "swipe"))
     }
 
     func testUnnamedSiblingControlsResolveToCoordinatesWithoutSendingAXPaths() throws {
@@ -201,13 +240,43 @@ final class ScreenGuardTests: XCTestCase {
     }
 
     func testOlderRunnerCannotSilentlySkipScreenGuards() throws {
-        let supported: [String: Any] = ["lifecycleOwner": "host", "observationVersion": 2, "actionVersion": 4,
+        let supported: [String: Any] = ["lifecycleOwner": "host", "observationVersion": 2, "actionVersion": 5,
             "launchVersion": 1, "frameStabilityVersion": 1, "screenGuardVersion": 1]
         XCTAssertNoThrow(try XCTestBackend.validateCapabilities(supported))
         for key in ["observationVersion", "actionVersion", "screenGuardVersion"] {
             var older = supported
             older[key] = 0
             XCTAssertThrowsError(try XCTestBackend.validateCapabilities(older))
+        }
+        var withoutMotion = supported
+        withoutMotion["actionVersion"] = 4
+        XCTAssertThrowsError(try XCTestBackend.validateCapabilities(withoutMotion)) {
+            XCTAssertEqual(($0 as? SomaError)?.code, "runner_needs_rebuild")
+        }
+    }
+
+    func testSwipeSuccessMustConfirmRequestedMotion() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("swipe-receipt-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let png = try screenPNG(), frame = try FrameFingerprint(png: png)
+        let motion = SwipeMotion(velocity: 100, pressDuration: 0.5, holdDuration: 0.2)
+        var response: [String: Any] = ["ok": true, "result": ["kind": "swipe", "motion": motion.result],
+            "execution": ["started": true, "inputCompleted": true, "completed": true],
+            "stability": ["stable": true, "hash": frame.hash, "consecutiveFrames": 3, "stableForMs": 400.0, "elapsedMs": 500.0],
+            "frame": ["hash": frame.hash, "width": frame.width, "height": frame.height, "capturedAt": 100.0,
+                      "screenshotBase64": png.base64EncodedString()]]
+        let result = try ActionReply.decode(XCTestCapture.actionResponse(response, directory: directory, expectedMotion: motion))
+        XCTAssertEqual((result["motion"] as? [String: Any])?["velocity"] as? Double, 100)
+        for value: Any in [NSNull(), SwipeMotion().result, ["velocity": 100, "pressDuration": 0.5],
+                          ["velocity": 100, "pressDuration": 0.5, "holdDuration": 0]] {
+            response["result"] = ["kind": "swipe", "motion": value]
+            XCTAssertThrowsError(try XCTestCapture.actionResponse(response, directory: directory, expectedMotion: motion)) {
+                let failure = $0 as? ActionFailure
+                XCTAssertEqual(failure?.code, "missing_swipe_motion_facts")
+                XCTAssertEqual(failure?.possiblyExecuted, true)
+                XCTAssertEqual(failure?.requiresObservation, true)
+                XCTAssertNotNil(failure?.result?["frame"])
+            }
         }
     }
 

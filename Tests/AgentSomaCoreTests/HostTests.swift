@@ -109,6 +109,23 @@ final class HostTests: XCTestCase {
         XCTAssertThrowsError(try call(paths, session: session, op: "status"))
     }
 
+    func testOverlongSwipeNeverReachesBackendOrInvalidatesObservation() throws {
+        let backend = ControlledBackend()
+        let (paths, session, finished) = try host(timeout: 5, backend: backend)
+        _ = try call(paths, session: session, op: "observe")
+        let response = try call(paths, session: session, op: "swipe", fields: ["reference": "o1",
+            "fromX": 100, "fromY": 600, "toX": 100, "toY": 200, "velocity": 1])
+        XCTAssertEqual(response["outcome"] as? String, "not_dispatched")
+        XCTAssertEqual((response["error"] as? [String: Any])?["code"] as? String, "swipe_duration_exceeded")
+        XCTAssertEqual(backend.actionCount, 0)
+        XCTAssertEqual(backend.inputCount, 0)
+        let tap = try call(paths, session: session, op: "tap", fields: ["reference": "o1", "x": 100, "y": 600])
+        XCTAssertEqual(tap["outcome"] as? String, "completed")
+        XCTAssertEqual(backend.inputCount, 1)
+        _ = try call(paths, session: session, op: "disconnect")
+        wait(for: [finished], timeout: 3)
+    }
+
     func testHealthTrafficCannotPreventIdleCleanup() throws {
         let backend = ControlledBackend()
         let (paths, session, finished) = try host(timeout: 0.4, backend: backend)

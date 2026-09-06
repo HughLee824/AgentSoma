@@ -53,7 +53,11 @@ Runner 使用仓库内的[独立 Xcode 工程](Runner/AgentSomaRunner.xcodeproj/
 
 `tap/swipe` 在输入前检查 App/弹窗及屏幕上下文，并比较整屏与操作区域的截图指纹；通过后直接执行宿主提供的坐标，不再依赖 identifier/label 唯一性。可用 `--max-screen-change`、`--max-region-change` 设置变化比例阈值，用 `--protect oN:eN` 增加最多三个保护区域。明确端点滑动为 `swipe oN --from-x X --from-y Y --to-x X --to-y Y`。变化超限时返回 `not_dispatched` 并要求重新 observe。参数、算法和启发式限制见 [动作前画面校验](docs/screen-guard.md)。
 
-`tap/swipe/type/press` 在全部输入调用结束后自动检测画面稳定：约每 200ms 采样，至少 3 帧的全帧像素 SHA-256 一致且覆盖至少 400ms，才返回 `completed`。结果包含 `execution.inputCompleted`、`stability` 和 `frame.screenshot` 本地路径。5 秒检测预算内未稳定则返回 `unknown` / `frame_stability_timeout`，保留输入事实与最后一帧；调用 agent 先观察，不重发，也不额外猜测“等待 Lark 动画”。当前协议为 `actionVersion=4`、`observationVersion=2`、`screenGuardVersion=1`，已有旧 Runner 需重新构建。
+精细调整滚轮或拖动事件块时，`swipe` 可显式指定 `--velocity`（XCTest 速度单位，pixels/s，默认 500）、`--press-duration`（移动前按住的秒数，默认 0）、`--hold-duration`（到达终点后、抬手前停留的秒数，默认 0）。例如用当前观察确定起终点后，添加 `--velocity 100 --hold-duration 0.2` 尝试慢速微调；需要先长按再移动的控件可再添加 `--press-duration 0.5`。这些是起始尝试参数，不保证一格。`press-duration` 不是拖动耗时，单纯缩短距离也不会降低速度。参数范围、动作预算和示例见 [可控拖动](docs/actions.md#可控拖动)。
+
+调用 agent 应先读实际选中值，再调整并重新 observe 核对；即使画面或值没变，已派发动作也会使旧引用失效。出现连续无变化或来回跳过目标时，更换速度、结束停留或交互方式，不要只反复猜距离。滚轮只暴露为 scroll_view 时，不能假定支持原生 picker 按值设置。使用 `inspect oN:eN` 直接读取相关控件的 frame；文字 frame 的顶边不等于时间线等业务区域的边界，须结合中心位置和截图定位。日程等范围输入应分别核对开始和结束值，不能沿用默认时长后就宣称已验证任意时长设置。
+
+`tap/swipe/type/press` 在全部输入调用结束后自动检测画面稳定：约每 200ms 采样，至少 3 帧的全帧像素 SHA-256 一致且覆盖至少 400ms，才返回 `completed`。结果包含 `execution.inputCompleted`、`stability` 和 `frame.screenshot` 本地路径。5 秒检测预算内未稳定则返回 `unknown` / `frame_stability_timeout`，保留输入事实与最后一帧；调用 agent 先观察，不重发，也不额外猜测“等待 Lark 动画”。当前协议为 `actionVersion=5`、`observationVersion=2`、`screenGuardVersion=1`；旧 Runner 不支持速度与停留参数，连接时会要求重新 build-runner，不能复用旧协议的产物。
 
 调用 agent 的命令执行工具若提前返回后台任务 ID（例如 `exec_command` 的 `session_id`），必须保留完整返回对象，并通过对应的续读工具（例如 `write_stdin`）取得原命令的退出码和输出。这个 ID 属于命令执行工具，与 AgentSoma 的设备 `session` 不同。不能只打印 `output` 而丢弃任务 ID，也不能用固定 sleep 加重复 `status` 来猜测原命令是否结束。
 

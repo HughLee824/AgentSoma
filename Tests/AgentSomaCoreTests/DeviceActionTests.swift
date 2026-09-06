@@ -26,6 +26,38 @@ final class DeviceActionTests: XCTestCase {
         XCTAssertThrowsError(try DeviceAction(operation: "swipe", request: ["reference": "o1:e2", "direction": "forward"]))
     }
 
+    func testInvalidSwipeMotionIsRejectedBeforeDispatch() throws {
+        let swipe: [String: Any] = ["reference": "o1:e2", "direction": "up"]
+        for (key, value): (String, Any) in [("velocity", 0), ("velocity", -1), ("velocity", 10_001),
+            ("velocity", true), ("velocity", "100"), ("velocity", Double.nan),
+            ("pressDuration", -0.1), ("pressDuration", 5.1), ("pressDuration", NSNull()),
+            ("holdDuration", -0.1), ("holdDuration", 5.1), ("holdDuration", Double.infinity)] {
+            var request = swipe
+            request[key] = value
+            XCTAssertThrowsError(try DeviceAction(operation: "swipe", request: request)) {
+                XCTAssertEqual(($0 as? SomaError)?.code, "invalid_swipe_motion")
+            }
+        }
+        for key in ["velocity", "pressDuration", "holdDuration"] {
+            XCTAssertThrowsError(try DeviceAction(operation: "tap", request: ["reference": "o1:e2", key: 1]))
+        }
+    }
+
+    func testSwipeDefaultsAndPartialOverrides() throws {
+        let request: [String: Any] = ["reference": "o1:e2", "direction": "up"]
+        let defaults = try XCTUnwrap(DeviceAction(operation: "swipe", request: request).swipeMotion)
+        XCTAssertEqual(defaults.velocity, 500)
+        XCTAssertEqual(defaults.pressDuration, 0)
+        XCTAssertEqual(defaults.holdDuration, 0)
+        var held = request
+        held["holdDuration"] = 0.2
+        let motion = try XCTUnwrap(DeviceAction(operation: "swipe", request: held).swipeMotion)
+        XCTAssertEqual(motion.velocity, 500)
+        XCTAssertEqual(motion.pressDuration, 0)
+        XCTAssertEqual(motion.holdDuration, 0.2)
+        XCTAssertNil(try DeviceAction(operation: "tap", request: ["reference": "o1:e2"]).swipeMotion)
+    }
+
     func testReturnRequiresAnExplicitKeyAndElement() throws {
         let action = try DeviceAction(operation: "press", request: ["reference": "o1:e27", "key": "return"])
         XCTAssertEqual(action.fields["key"] as? String, "return")

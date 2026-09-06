@@ -134,14 +134,15 @@ final class XCTestBackend: SessionBackend {
 
     func perform(_ action: DeviceAction, target: ObservedTarget) throws -> [String: Any] {
         let response = try request("act", fields: Self.actionFields(action, target: target))
-        return try ActionReply.decode(XCTestCapture.actionResponse(response, directory: paths.directory, expectedGuard: target.gesture?.screenGuard))
+        return try ActionReply.decode(XCTestCapture.actionResponse(response, directory: paths.directory,
+            expectedGuard: target.gesture?.screenGuard, expectedMotion: target.gesture?.motion))
     }
 
     static func validateCapabilities(_ result: [String: Any]) throws {
         guard result["lifecycleOwner"] as? String == "host", result["observationVersion"] as? Int == 2,
-              result["actionVersion"] as? Int == 4, result["launchVersion"] as? Int == 1,
+              result["actionVersion"] as? Int == 5, result["launchVersion"] as? Int == 1,
               result["frameStabilityVersion"] as? Int == 1, result["screenGuardVersion"] as? Int == 1 else {
-            throw SomaError("runner_needs_rebuild", "Run build-runner for guarded coordinate actions, then connect with its new .xctestrun")
+            throw SomaError("runner_needs_rebuild", "Run build-runner for swipe speed and hold controls (actionVersion 5), then connect with its new .xctestrun")
         }
     }
 

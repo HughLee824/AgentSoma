@@ -19,7 +19,7 @@ agentsoma --session "$SESSION" tap o6:e10 --max-screen-change 0.01 --max-region-
 
 - 元素 tap 使用捕获 frame 与当前观察 scope 相交部分的中心点。元素 swipe 使用该区域轴向 80%→20%（up/left）或 20%→80%（down/right）的端点。空 identifier/label 不影响坐标解析。禁止自动滚动寻找离屏元素。
 - 坐标 swipe 必须同时提供四个端点参数，以观察 ID 为引用，不能混用元素引用或 `--direction`。单位是屏幕点，不是 PNG 像素；起终点必须在原 scope 内且至少相距 1 点。
-- Runner 使用 XCTest 坐标 tap，或 `press(forDuration: 0, thenDragTo:)`。后一项为坐标拖动原语，速度由 XCTest 决定；不会声称是精确时长/速度的底层 HID swipe。
+- Runner 使用 XCTest 坐标 tap，或带 `withVelocity` / `thenHoldForDuration` 的 `press(forDuration:thenDragTo:)` 重载。拖动速度、起始按住和结束停留由已校验的 motion 参数指定；这仍是 XCTest 坐标原语，不承诺内容位移或底层 HID 的精确时序。参数见 [可控拖动](actions.md#可控拖动)。
 - `--max-screen-change` 和 `--max-region-change` 满足 `0 <= region <= screen <= 1`。修改阈值是调用方明确选择，Runner 不会自动放宽阈值、重试或修正坐标。设置为 1 会使对应相似度限制失去拦截能力，上下文检查仍有效。
 
 ## 算法及责任边界
@@ -46,7 +46,7 @@ agentsoma --session "$SESSION" tap o6:e10 --max-screen-change 0.01 --max-region-
 - 参数、坐标、保护引用不合法：宿主或 Runner 拒绝，不发送输入。
 - 输入后的失败、丢失响应、画面不稳定：沿用 unknown 和不重发规则，不把动作前的通过证据当成动作完成。
 
-设备协议现在是 observationVersion=2、actionVersion=4、screenGuardVersion=1、frameStabilityVersion=1。旧 Runner 在 connect 时返回 runner_needs_rebuild，必须重新 build-runner，不静默回退到无校验坐标输入。
+设备协议现在是 observationVersion=2、actionVersion=5、screenGuardVersion=1、frameStabilityVersion=1。actionVersion=5 增加显式滑动速度与两端停留，见 [可控拖动](actions.md#可控拖动)。旧 Runner 在 connect 时返回 runner_needs_rebuild，必须重新 build-runner，不静默忽略新参数或回退到无校验坐标输入。
 
 ## 验证边界与剩余风险
 

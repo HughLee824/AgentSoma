@@ -208,7 +208,7 @@ final class LiveSessionTests: XCTestCase {
             let hostManaged = ProcessInfo.processInfo.environment["AGENTSOMA_HOST_MANAGED"] == "1"
             return ["protocol": "agentsoma-spike-jsonl-v1", "lifecycleOwner": hostManaged ? "host" : "spike",
                     "lifetimeLimitSeconds": hostManaged ? NSNull() : 900, "observationVersion": 2,
-                    "actionVersion": 4, "launchVersion": 1, "frameStabilityVersion": 1, "screenGuardVersion": 1,
+                    "actionVersion": 5, "launchVersion": 1, "frameStabilityVersion": 1, "screenGuardVersion": 1,
                     "applicationStateTimeoutSupported": stateTimeout != nil]
         }
         if op == "shutdown" { return ["stopped": true] }
@@ -409,10 +409,15 @@ final class LiveSessionTests: XCTestCase {
         }
         let start = coordinate(gesture.start)
         if let end = gesture.end {
+            guard let motion = gesture.motion else { throw CommandError("invalid_swipe_motion") }
             let destination = coordinate(end)
-            try event { start.press(forDuration: 0, thenDragTo: destination) }
+            try event {
+                start.press(forDuration: motion.pressDuration, thenDragTo: destination,
+                            withVelocity: XCUIGestureVelocity(rawValue: CGFloat(motion.velocity)),
+                            thenHoldForDuration: motion.holdDuration)
+            }
             return ["kind": kind, "coordinateSpace": "screen_points", "fromX": gesture.start.x,
-                    "fromY": gesture.start.y, "toX": end.x, "toY": end.y]
+                    "fromY": gesture.start.y, "toX": end.x, "toY": end.y, "motion": motion.result]
         }
         try event { start.tap() }
         return ["kind": kind, "coordinateSpace": "screen_points", "x": gesture.start.x, "y": gesture.start.y]

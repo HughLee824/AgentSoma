@@ -213,7 +213,10 @@ final class ObservationCache {
                                 description: "Cannot prepare a screen guard from this observation; observe again",
                                 possiblyExecuted: false, requiresObservation: true)
         }
-        let gesture = CoordinateGesture(start: start, end: end, screenGuard: guardValue)
+        let gesture = CoordinateGesture(start: start, end: end, screenGuard: guardValue, motion: action.swipeMotion)
+        guard gesture.withinMotionBudget else {
+            throw SomaError("swipe_duration_exceeded", "Estimated swipe motion exceeds 10 seconds; use a shorter distance, faster velocity or shorter holds")
+        }
         try gesture.validate(kind: action.kind)
         return ObservedTarget(context: capture.metadata, path: [], gesture: gesture)
     }

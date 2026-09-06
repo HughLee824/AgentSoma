@@ -130,10 +130,38 @@ struct ScreenGuard: Codable {
     }
 }
 
+struct SwipeMotion: Codable, Equatable {
+    static let maximumEstimatedDuration: TimeInterval = 10
+    var velocity = 500.0
+    var pressDuration = 0.0
+    var holdDuration = 0.0
+
+    var valid: Bool {
+        [velocity, pressDuration, holdDuration].allSatisfy(\.isFinite)
+            && velocity > 0 && velocity <= 10_000
+            && (0...5).contains(pressDuration) && (0...5).contains(holdDuration)
+    }
+
+    var result: [String: Any] {
+        ["velocity": velocity, "pressDuration": pressDuration, "holdDuration": holdDuration]
+    }
+}
+
 struct CoordinateGesture: Codable {
     let start: CGPoint
     let end: CGPoint?
     let screenGuard: ScreenGuard
+    var motion: SwipeMotion? = nil
+
+    var withinMotionBudget: Bool {
+        guard let end, let motion else { return true }
+        // XCTest documents velocity in pixels/s. Use screenshot scale for a conservative
+        // estimate; this bounds requested motion, not the runtime's idle/capture overhead.
+        let scale = max(Double(screenGuard.pixelWidth) / screenGuard.context.screen.width,
+                        Double(screenGuard.pixelHeight) / screenGuard.context.screen.height)
+        let duration = motion.pressDuration + hypot(end.x - start.x, end.y - start.y) * scale / motion.velocity + motion.holdDuration
+        return motion.valid && duration.isFinite && duration <= SwipeMotion.maximumEstimatedDuration
+    }
 
     // Always protect the touch-down neighborhood; also protect the entire swipe corridor.
     static func actionRegions(start: CGPoint, end: CGPoint?, screen: CGRect) -> [ScreenRect] {
@@ -148,7 +176,8 @@ struct CoordinateGesture: Codable {
     func validate(kind: String) throws {
         try screenGuard.validate()
         guard [start.x, start.y].allSatisfy(\.isFinite), screenGuard.context.scope.cgRect.contains(start),
-              (kind == "tap" && end == nil) || (kind == "swipe" && end != nil) else { throw ScreenGuard.Failure.invalidGuard }
+              (kind == "tap" && end == nil && motion == nil)
+                || (kind == "swipe" && end != nil && motion?.valid == true && withinMotionBudget) else { throw ScreenGuard.Failure.invalidGuard }
         if let end {
             guard [end.x, end.y].allSatisfy(\.isFinite), screenGuard.context.scope.cgRect.contains(end),
                   hypot(end.x - start.x, end.y - start.y) >= 1 else { throw ScreenGuard.Failure.invalidGuard }
