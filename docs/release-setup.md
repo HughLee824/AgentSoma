@@ -51,11 +51,23 @@ AgentSoma 仍是 macOS CLI。Mac Developer ID 签名、公证是下载渠道与�
 
 首次分发只生成已验证的 `macos-arm64` 安装包。工作流使用 GitHub 的 `macos-15` ARM64 runner 和 Xcode 16.0；Intel 发布不在当前矩阵内。构建不需要维护者的 Apple 签名证书、profile 或 iPhone。
 
+发布采用 **云端生成草稿 → 本地 Mac + iPhone 验收 → 发布同一安装包 → 更新 Homebrew → 验证公共安装入口**。
+
+| 执行位置 | 检查范围 | 不代表什么 |
+| --- | --- | --- |
+| GitHub 的 CI 工作流 | Swift/Python 测试 | 发布包已构建或真机验收通过 |
+| GitHub 的 Draft release 工作流 | 测试、编译、归档、搬移、Homebrew 安装与摘要校验 | setup、设备连接或业务任务通过 |
+| 维护者本地 Mac + iPhone | 草稿安装包的 setup、连接、观察、操作、升级及业务结果 | 未测试的设备、系统和签名组合也兼容 |
+
+[GitHub 托管 runner](https://docs.github.com/en/actions/concepts/runners/github-hosted-runners) 提供构建主机，不附带供此工作流使用的 iPhone。当前不接入云真机平台或 self-hosted runner；未来若自动化真机检查，需要另外提供 Mac + iPhone 测试环境。
+
 1. 将本次发布源码提交到 `HughLee824/AgentSoma` 的 `main`，让 CI 通过。
 2. 在 Actions 中运行 **Draft release**，填写未使用过的版本，不含 `v`。工作流只允许从主仓库的 `main` 执行，运行 Swift/Python 测试，构建干净源码，验证归档、搬移和 Homebrew 安装后的全部 CLI/Runner 摘要。
-3. 验收通过后，独立的写入任务创建 GitHub Release **草稿**，附上 tar.gz、SHA-256 和从同一归档生成的 `agentsoma.rb`。已有 tag 拒绝复用，不覆盖旧版本。包含 `-` 的版本自动标记 prerelease。
-4. 检查草稿及对应版本的设备验收证据后发布。CI 没有 iPhone，不能替代 setup 和业务任务的真机验收。
-5. 稳定版发布后，在 `HughLee824/homebrew-tap` 的 Actions 运行 **Update AgentSoma**，填写相同版本。它拒绝草稿和预发布版，校验归档、源码提交与 tag，再生成并对比 release 中的 formula，最后提交到 Tap 的 `main`。重复同版本不产生空提交。
+3. 云端检查通过后，独立的写入任务创建 GitHub Release **草稿**，附上 tar.gz、SHA-256 和从同一归档生成的 `agentsoma.rb`。说明自动填入版本、源码提交、包摘要和工作流链接，**本地真机验收始终初始化为 pending**。已有 tag 拒绝复用，不覆盖旧版本。包含 `-` 的版本自动标记 prerelease。
+4. 在本地下载该草稿的安装包，按下文完成真机验收。将结果摘要填回草稿，补齐版本变化、升级说明和兼容性范围，保留失败和未测试项。
+5. 维护者核对验收记录与草稿的版本、源码 SHA、包 SHA-256 一致后，手动发布该草稿。发布使用本地验收过的同一批资产，不重新构建或替换包。这是维护者发布前的检查；当前工作流只创建草稿，不自动判断业务结果，也不自动阻止维护者在 GitHub 页面点击发布。
+6. 稳定版发布后，在 `HughLee824/homebrew-tap` 的 Actions 运行 **Update AgentSoma**，填写相同版本。它拒绝草稿和预发布版，校验归档、源码提交与 tag，再生成并对比 release 中的 formula，最后提交到 Tap 的 `main`。重复同版本不产生空提交。
+7. 从公共 Release 地址重新下载并核对摘要，按安装说明验证手动安装。稳定版另用 `brew install HughLee824/tap/agentsoma`（已有安装则升级）核对版本和连接；Tap 工作流的成功不替代这一步。浏览器下载及全新 Mac 的系统信任体验单独记录。
 
 Tap 初始文件位于 `packaging/homebrew-tap`，另复制仓库根目录的 `LICENSE`。其更新工作流只需要 Tap 自身的 `GITHUB_TOKEN`，不需要跨仓库写入 PAT；AgentSoma 源码与 Release 需公开可读。首次稳定版之前不放置指向不存在资产的 formula。预发布版本通过 GitHub Releases 手动安装。
 
@@ -63,9 +75,51 @@ Release 和 Tap 的实际可用版本以各仓库为准；发布流程不会自�
 
 formula 将原包的 `bin` 与 `libexec` 一起放在 Homebrew keg 的 `libexec` 下，并创建 `bin/agentsoma` 软链接，保持 CLI 的相对资源定位规则。安装与升级不执行 setup，不编译、不在 iPhone 上操作。每次 release 的 `brew test` 检查安装后的 CLI 与 Runner 全部文件摘要，以发现 Homebrew 清理或二进制处理引入的修改。
 
+### 本地候选包验收
+
+登录有权访问草稿的维护者账号，从草稿页面下载资产。也可以在对应源码提交的仓库目录使用已登录的 [GitHub CLI](https://cli.github.com/manual/gh_release_download)：
+
+```sh
+(
+  set -e
+  AGENTSOMA_VERSION=0.1.0-rc.1 # 替换为待验草稿版本
+  AGENTSOMA_PACKAGE="agentsoma-${AGENTSOMA_VERSION}-macos-arm64"
+  AGENTSOMA_ACCEPTANCE_DIR="$PWD/.local/releases/$AGENTSOMA_VERSION"
+  mkdir -p "$PWD/.local/releases"
+  mkdir "$AGENTSOMA_ACCEPTANCE_DIR"
+  gh release download "v${AGENTSOMA_VERSION}" --repo HughLee824/AgentSoma \
+    --dir "$AGENTSOMA_ACCEPTANCE_DIR" \
+    --pattern "${AGENTSOMA_PACKAGE}.tar.gz" --pattern "${AGENTSOMA_PACKAGE}.tar.gz.sha256"
+  python3 scripts/verify-release.py "$AGENTSOMA_ACCEPTANCE_DIR/${AGENTSOMA_PACKAGE}.tar.gz" \
+    --require-clean > "$AGENTSOMA_ACCEPTANCE_DIR/package-verification.json"
+  gh release view "v${AGENTSOMA_VERSION}" --repo HughLee824/AgentSoma \
+    --json body --jq .body > "$AGENTSOMA_ACCEPTANCE_DIR/acceptance.md"
+)
+```
+
+使用尚未存在的验收目录，避免覆盖旧记录；下载或校验失败会停止后续步骤。失败重试时另选新目录。核对 `package-verification.json` 的版本、源码提交和 SHA-256 与草稿一致；其中 `executed: true` 仅表示运行了版本/帮助命令和签名检查，没有操作 iPhone。浏览器下载也应使用同一校验命令。原始记录保存在已忽略的 `.local/releases/<version>/`，草稿只填写不含个人数据的结果摘要。
+
+按[安装说明](install.md)把完整包安装到源码目录外，从另一个工作目录运行它。每个命令使用该包的绝对路径，或先用 `command -v agentsoma` 和 `agentsoma --version` 确认入口，避免误用开发版。保留原始归档及 SHA-256，不用本地重新编译的 CLI 或 Runner 代替候选包。
+
+| 真机验收项 | 需要记录的结果 |
+| --- | --- |
+| 环境与安装 | 验收人、日期、Mac 架构/macOS/Xcode、iPhone 型号/iOS、签名类型、候选包路径和版本 |
+| 接入与退出 | `setup` 成功且 `compiled:false`；`connect → observe → 一次输入操作 → disconnect` 的实际结果 |
+| 重复与升级 | 重复 setup；从上一公开版本升级后的连接、Runner 复用或要求重新 setup。首发没有上一版本时写明“不适用” |
+| 业务结果 | 任务、预期值、保存后的实际值。例如在测试日历创建 10:00–11:00 日程，保存后重新打开核对日期、开始和结束时间；默认半小时不能代替这项验证 |
+| 支持范围 | 通过、失败及未测试的条件。首发或接入流程变更时补干净 Mac 的首次配置；免费账号等范围按实测声明 |
+
+外部 agent 可以协助执行本地验收，维护者依据观察结果填写草稿的 `Local device acceptance`，通过后改为 `passed`，并完成对应勾选；不适用项写明理由。setup 的截图或输入命令的成功响应不能代替业务结果核对。证书/profile、设备标识及含个人内容的截图和日志保留本地。
+
+### 版本与失败处理
+
+- RC（例如 `0.1.0-rc.1`）通过后可作为预发布版本公开供测试，使用手动安装。正式版 `0.1.0` 需要生成并验收它自己的包，不能只重命名 RC 资产或修改 Release 标题。
+- 构建或上传失败时保持未发布状态；重试前检查已有草稿和资产，避免把不同提交的包混入同一版本。重新构建后，以新包摘要重新验收。
+- 已公开版本发现问题时发布新版本修复，保留历史安装包供手动回退。Tap 更新失败只重试 Tap，不重建已验收的 Release。
+
 ## 验证范围
 
-本地验收记录覆盖 Apple Silicon / macOS 15.0.1 / Xcode 16.0 / iPhone 12 Pro / iOS 26.6，以及已有付费开发团队签名条件下的包校验、搬移、重签、重复 setup 和正常连接。原始设备记录、候选包、签名资料和日志保留在本地。CI 运行 Swift/Python 测试及发布包校验，没有物理 iPhone，不能替代真机验证。
+已有本地开发候选包的验收记录覆盖 Apple Silicon / macOS 15.0.1 / Xcode 16.0 / iPhone 12 Pro / iOS 26.6，以及已有付费开发团队签名条件下的包校验、搬移、重签、重复 setup 和正常连接。这些是路线验证，不自动构成后来 GitHub 构建包的验收结果。每次发布的结果以对应草稿的包摘要和本地验收记录为准。原始设备记录、候选包、签名资料和日志保留在本地。
 
 ## 尚未验收的发布条件
 

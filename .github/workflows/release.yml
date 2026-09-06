@@ -17,6 +17,7 @@ concurrency:
 
 jobs:
   build:
+    name: Build and package checks (no iPhone)
     if: github.repository == 'HughLee824/AgentSoma' && github.ref == 'refs/heads/main'
     runs-on: macos-15
     timeout-minutes: 30
@@ -56,6 +57,7 @@ jobs:
             .build/releases/agentsoma.rb
 
   draft:
+    name: Create draft (local device acceptance pending)
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -76,7 +78,7 @@ jobs:
           path: release-assets
       - name: Check downloaded artifacts and refuse an existing tag
         run: |
-          python3 scripts/verify-release.py "release-assets/agentsoma-${VERSION}-macos-arm64.tar.gz" --require-clean --no-execute
+          python3 scripts/verify-release.py "release-assets/agentsoma-${VERSION}-macos-arm64.tar.gz" --require-clean --no-execute > "$RUNNER_TEMP/verified-release.json"
           python3 scripts/generate-homebrew.py "release-assets/agentsoma-${VERSION}-macos-arm64.tar.gz" --output "$RUNNER_TEMP/agentsoma.rb"
           cmp "$RUNNER_TEMP/agentsoma.rb" release-assets/agentsoma.rb
           existing=$(git ls-remote --tags origin "refs/tags/v${VERSION}")
@@ -86,17 +88,57 @@ jobs:
           fi
       - name: Create a draft with all assets attached
         run: |
-          cat > "$RUNNER_TEMP/release-notes.md" <<'EOF'
-          Precompiled macOS CLI and iOS Runner for Apple Silicon, under the MIT license.
+          python3 - <<'PY' > "$RUNNER_TEMP/release-notes.md"
+          import json, os
+          from pathlib import Path
+          release = json.loads((Path(os.environ['RUNNER_TEMP']) / 'verified-release.json').read_text())
+          if release['version'] != os.environ['VERSION'] or release['sourceCommit'] != os.environ['SOURCE_COMMIT']:
+              raise SystemExit('The verified archive must match this workflow version and source commit.')
+          run_url = f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}"
+          print('Precompiled macOS CLI and iOS Runner for Apple Silicon, under the MIT license.\n')
+          print('## Build\n')
+          print(f"- Version: `{release['version']}`")
+          print(f"- Source commit: `{release['sourceCommit']}`")
+          print(f"- Archive: `agentsoma-{release['version']}-macos-{release['architecture']}.tar.gz`")
+          print(f"- Archive SHA-256: `{release['sha256']}`")
+          print(f"- Automated checks: [GitHub Actions]({run_url}) (attempt {os.environ['GITHUB_RUN_ATTEMPT']})\n")
+          PY
+          cat >> "$RUNNER_TEMP/release-notes.md" <<'EOF'
+          ## Changes
+
+          Pending: describe this version's changes, compatibility changes and upgrade steps.
+
+          ## Automated checks — passed
+
+          - Swift and Python tests.
+          - Archive integrity, relocated CLI version/help commands and Mac code signature verification.
+          - Homebrew installation and installed CLI/Runner file digests.
+
+          These checks ran on GitHub-hosted machines without a physical iPhone. They did not run device setup, connect to a phone or verify an app task.
+
+          ## Local device acceptance — pending
+
+          Maintainer / date: pending.
+          Environment (Mac architecture, macOS, Xcode, iPhone model, iOS, signing type): pending.
+
+          - [ ] Downloaded this draft's archive and matched its version, source commit and SHA-256 above.
+          - [ ] Installed the complete package outside the source checkout and used its CLI for all device checks.
+          - [ ] Setup completed without compilation; connect, observe, an input action and disconnect passed.
+          - [ ] Repeated setup and upgrade from the previous release passed. For the first release, record upgrade as not applicable.
+          - [ ] An app task passed by checking the saved result, including explicit non-default values where applicable.
+
+          Task, expected/actual result, upgrade result and remaining limitations: pending.
+          Follow docs/release-setup.md on the maintainer's local Mac with a connected iPhone. Record the results before changing this section to passed and publishing. Keep profiles, device identifiers and private screenshots/logs local.
+
+          ## Installation
 
           Download the tar.gz and its .sha256 file together. Installation and iPhone setup instructions are in the package README and repository docs/install.md.
 
-          Device setup requires full Xcode and your own Apple development certificate, private key and matching provisioning profile. Setup re-signs the precompiled Runner locally. Free Personal Team onboarding and renewal are not yet validated.
+          Device setup requires full Xcode and your own Apple development certificate, private key and matching provisioning profile. Setup re-signs the precompiled Runner locally. Free Personal Team onboarding and renewal are not yet validated. The Mac CLI is ad-hoc signed, without Developer ID signing or notarization.
 
-          CI verifies Swift tests, package integrity, relocation and Homebrew installation. CI has no physical iPhone; device compatibility is documented separately in docs/release-setup.md. The Mac CLI is ad-hoc signed, without Developer ID signing or notarization.
-
-          Maintainer: review this draft, then publish it. After publication, run the Homebrew Tap's Update AgentSoma workflow with the same version. The attached agentsoma.rb contains the exact versioned download URL and archive checksum.
+          Maintainer: publish the exact archive accepted locally. After a stable release is published, run the Homebrew Tap's Update AgentSoma workflow with the same version, then verify installation from the public download URL and Tap. Prereleases use manual installation. The attached agentsoma.rb contains the exact versioned download URL and archive checksum.
           EOF
           flags=()
           if [[ "$VERSION" == *-* ]]; then flags+=(--prerelease); fi
           gh release create "v${VERSION}" release-assets/* --target "$SOURCE_COMMIT" --draft "${flags[@]}" --title "AgentSoma ${VERSION}" --notes-file "$RUNNER_TEMP/release-notes.md"
+          cat "$RUNNER_TEMP/release-notes.md" >> "$GITHUB_STEP_SUMMARY"
