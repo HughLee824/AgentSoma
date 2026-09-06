@@ -29,6 +29,8 @@ There are separate identities: the AgentSoma device session, the execution tool'
 
 `inspect` can read an invalidated cached observation, but cannot revive its references. An action screenshot contains no new AX references. A nonzero shell exit or lost transport response alone does not prove an input was never sent.
 
+For an already authorized, selected action in Codex, the optional [action-and-observation experiment](references/action-observation.md) performs that one action and its follow-up observation in one orchestration call. Read the template before using it. It preserves the two results separately, handles pending commands, and never chooses or replays an input. A successful returned observation replaces the separate `observe` step; read its screenshot and verify the result before choosing the next action.
+
 ## Adjust wheels from observed values
 
 - Read the current selected value from the form or control and inspect the wheel's frame and child rows. Visible, enabled `text` is not a promise that tapping selects that value. If a value tap has no effect, prefer a controlled drag for similar wheels unless new evidence supports another interaction.

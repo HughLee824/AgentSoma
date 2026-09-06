@@ -143,6 +143,8 @@ agentsoma --session "$SESSION" disconnect
 
 仓库附带 [AgentSoma skill](skills/agentsoma/SKILL.md)，包含设备入口、滚轮调整策略和 [Codex 固定调用模板](skills/agentsoma/references/codex-calls.md)。将整个 `skills/agentsoma` 文件夹复制到客户端的 skill 目录（Codex 为 `$CODEX_HOME/skills`，未设置时为 `~/.codex/skills`），在新任务中加载或用 `$agentsoma` 调用；仅安装 CLI 不会注册 skill。
 
+skill 还附带可选的[动作与观察合并实验](skills/agentsoma/references/action-observation.md)：一次编排调用执行已选定的动作，再采集新观察，分别保留两份结果。它不增加 CLI 参数，不自动选择或重放输入动作。
+
 `observe` 和 `inspect` 成功时输出多行文本；其他结果及运行时错误为单行 JSON。成功退出码为 `0`，运行失败为 `1`。参数语法错误输出到 stderr，并以非零状态退出。
 
 调用 `open`、`tap`、`swipe`、`type` 和 `press` 时，除退出码外还要检查动作结果：
@@ -225,6 +227,8 @@ python3 -m unittest discover -s scripts/tests -v
 ```
 
 Python 3.9+ 仅用于发布工具及其测试，不是已安装 CLI 的运行依赖。唯一 Swift 包依赖为 [Swift ArgumentParser](https://github.com/apple/swift-argument-parser/tree/1.5.0)，锁定版本 `1.5.0`。
+
+修改 Codex skill 模板时，另用 Node.js 22+ 运行 `node --test scripts/tests/test_agent_templates.mjs`。测试将文档中的 JavaScript 用于受控工具响应；Node 仅为开发测试所需，不是 CLI 或 skill 执行环境的依赖。
 
 CI 没有真实 iPhone。涉及设备行为的改动还需重新构建 Runner，并在真机验证受影响流程。问题报告应包含 Mac/Xcode/iOS 版本、复现步骤、预期行为和相关错误。分享日志前移除私人画面内容、provisioning profile 和签名资料。修改公共使用说明时，请同步更新中英文 README。新增文件请遵循[目录约定](docs/architecture.md#repository-layout)，本地实验和设备记录不进入 Git。
 
