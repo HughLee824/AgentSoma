@@ -47,7 +47,11 @@ Runner 使用仓库内的[独立 Xcode 工程](Runner/AgentSomaRunner.xcodeproj/
 
 当前提供 `build-runner`、`devices`、`connect`、`status`、`apps`、`open`、`observe`、`inspect`、`tap`、`swipe`、`type`、`press`、`disconnect`。`devices` 返回 CoreDevice 已知设备和原生连接状态，connect 检查是否能建立会话；`apps` 查询已安装 App 的名称和 bundle ID，支持 `--query` 筛选，每页最多 50 项，按返回的 `nextOffset` 继续读取。见 [发现接口与完整调用验收](docs/discovery.md)。
 
+CoreDevice 接入失败会返回失败阶段和原始错误：`coredevice_initialization_timeout` 表示服务初始化超时，`coredevice_access_denied` 表示原始输出包含明确的权限拒绝，其余保留 `coredevice_failed`。沙盒内发生初始化超时或权限拒绝时，先通过调用工具的授权机制，在允许 CoreDevice 通信的本机环境中对照执行一次只读 `devices`，再决定后续操作；不要仅凭超时或 USB 可见就确诊服务故障，也不要连续重试或默认重启服务。详见 [接入诊断](docs/discovery.md#接入失败诊断)。
+
 `open` 已移除临时 App 白名单；宿主先检查安装状态，再由 Runner 激活已运行的 App，未运行时启动。未安装的 App 在派发前拒绝。`observe` 返回截图路径及紧凑 AX 文本，`inspect` 展开同一缓存快照；动作在设备端确认目标后执行。见 [观察契约](docs/observations.md) 和 [动作接口与验收](docs/actions.md)。
+
+查找默认观察文本中未显示的目标时，用 `inspect oN --query Calendar` 搜索整个已缓存快照；查询对 label、identifier、value 和 role 做不区分大小写的子串匹配，先匹配再分页，返回元素引用、frame 和父级引用。已有引用则直接 `inspect oN:eN`，例如检查滚轮子树，无需从整棵树的第一页开始翻。`inspect oN | rg Calendar` 只搜索一页输出。无匹配与 `source_missing=true` 分别表示缓存中没找到、源采集不完整；若截图已足以定位，可使用现有画面守卫约束下的坐标动作。查询不重新观察，也不恢复旧引用。使用新 CLI 建立的宿主支持该查询；旧宿主未确认查询时返回 `inspect_query_unsupported`，需重新 connect/observe，可复用协议兼容的 Runner。
 
 `type oN:eN --mode insert --text ...` 保留现有光标，需要输入框已有键盘焦点；需要聚焦时先 tap、再 observe。`--mode replace` 聚焦并替换全部内容，空字符串表示清空，两种模式都不自动提交。文本源也可选 `--stdin < text.txt`，与 `--text` 互斥，按原文读取 UTF-8 至 EOF；仍限制 4096 字节并拒绝末尾换行。`press oN:eN --key return` 使用已有焦点发送独立 Return，完成后重新 observe 核对效果。`swipe oN:eN --direction up` 的方向表示手指移动方向；坐标点击使用 `tap oN --x X --y Y`，单位为屏幕点。
 

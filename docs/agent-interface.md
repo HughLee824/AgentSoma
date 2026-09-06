@@ -40,6 +40,8 @@
 
 已确认详情展开读取同一份已采集快照，保留观察 ID 和元素引用；获取最新界面则重新调用 `observe`，形成新的一轮观察。展开旧快照不会恢复已失效的操作引用。由此，展示层未展开的数据可以继续读取，源采集时未取得的数据不能假装从原快照补出；原快照已不可用时应明确返回不可用，不能在相同观察 ID 下偷偷换成新采集的数据。展开入口 `inspect oN[:eN] --offset N` 已实现，读取最近两次成功观察的缓存。
 
+`inspect oN[:eN] --query TEXT` 在整份缓存或指定子树中搜索原始 label、identifier、value 和 role，先匹配再分页，返回匹配引用、frame 和父级引用。它保留源缺失标记，查询不恢复旧引用。已知引用时直接 inspect 子树，避免翻阅整棵树；查询规则和无匹配语义见[观察查询](observations.md#搜索缓存中的目标)。
+
 具体字段与真机数据样例见 [observe 与 AX 树实例](examples/observe/README.md)，另有 [紧凑阅读样例](examples/observe/observe.compact.example.txt)。紧凑样例是根据现有数据手工编排的讨论稿，实际过滤和输出已由宿主实现，另见 [真实 CLI 输出](examples/observe/observe.cli.example.txt)；CLI 采用 `inspect` 展开详情，并返回本地图片路径供 agent 读取。内部图像暂用 JSON 中的 PNG base64，宿主解码、验证尺寸并写入 PNG，不把 base64 展开给 agent。现有实验 JSON 是 Runner 自行序列化的选定属性，不是完整原始 AX 数据。
 
 ## 动作的最小集合

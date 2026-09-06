@@ -247,6 +247,54 @@ final class HostTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: image))
     }
 
+    func testInspectQueryFindsLaterNodesWithoutRecapturingOrRevivingReferences() throws {
+        let backend = ControlledBackend()
+        let (paths, session, finished) = try host(timeout: 5, backend: backend)
+        _ = try call(paths, session: session, op: "observe")
+        let fields: [String: Any] = ["reference": "o1", "offset": 0, "query": "wEb iNpUt"]
+        let reply = try call(paths, session: session, op: "inspect", fields: fields)
+        XCTAssertEqual(reply["ok"] as? Bool, true)
+        let result = try XCTUnwrap(reply["result"] as? [String: Any])
+        let text = try XCTUnwrap(result["text"] as? String)
+        XCTAssertEqual(result["query"] as? String, "wEb iNpUt")
+        // The recorded source contains a group, its text child and the separate input.
+        XCTAssertTrue(text.contains("matched_nodes=3"))
+        XCTAssertTrue(text.contains("\"ref\":\"o1:e25\""))
+        XCTAssertTrue(text.contains("\"ref\":\"o1:e26\""))
+        XCTAssertTrue(text.contains("\"ref\":\"o1:e27\""))
+        XCTAssertTrue(text.contains("\"parentRef\":"))
+        XCTAssertEqual(result["refs"] as? String, "current")
+        _ = try call(paths, session: session, op: "tap", fields: ["reference": "o1:e27"])
+        let stale = try call(paths, session: session, op: "inspect", fields: fields)
+        XCTAssertEqual((stale["result"] as? [String: Any])?["refs"] as? String, "invalidated")
+        XCTAssertEqual(backend.observeCount, 1)
+        XCTAssertEqual(backend.inputCount, 1)
+        _ = try call(paths, session: session, op: "disconnect")
+        wait(for: [finished], timeout: 3)
+    }
+
+    func testInvalidInspectQueryDoesNotRenewOrChangeReferences() throws {
+        let backend = ControlledBackend()
+        let (paths, session, finished) = try host(timeout: 5, backend: backend)
+        _ = try call(paths, session: session, op: "observe")
+        let first = try call(paths, session: session, op: "status")["idleRemainingSeconds"] as! Double
+        Thread.sleep(forTimeInterval: 0.1)
+        for query: Any in [42, NSNull(), "", "  ", "one\ntwo", String(repeating: "a", count: 257)] {
+            let reply = try call(paths, session: session, op: "inspect", fields: ["reference": "o1", "offset": 0, "query": query])
+            XCTAssertEqual((reply["error"] as? [String: Any])?["code"] as? String, "invalid_inspect_query")
+        }
+        let afterInvalid = try call(paths, session: session, op: "status")["idleRemainingSeconds"] as! Double
+        XCTAssertLessThan(afterInvalid, first - 0.08)
+        let result = try call(paths, session: session, op: "inspect", fields: ["reference": "o1", "offset": 0, "query": "absent"])
+        XCTAssertEqual((result["result"] as? [String: Any])?["refs"] as? String, "current")
+        let renewed = try call(paths, session: session, op: "status")["idleRemainingSeconds"] as! Double
+        XCTAssertGreaterThan(renewed, afterInvalid + 0.08)
+        XCTAssertEqual(backend.observeCount, 1)
+        XCTAssertEqual(backend.actionCount, 0)
+        _ = try call(paths, session: session, op: "disconnect")
+        wait(for: [finished], timeout: 3)
+    }
+
     func testObservationAndInspectRenewIdleButInvalidInspectDoesNot() throws {
         let backend = ControlledBackend()
         let (paths, session, finished) = try host(timeout: 5, backend: backend)

@@ -2,6 +2,43 @@ import XCTest
 @testable import AgentSomaCore
 
 final class DiscoveryTests: XCTestCase {
+    func testInitializationTimeoutPreservesEvidenceAndSuggestsPermissionComparison() {
+        let raw = "ERROR: Timed out waiting for CoreDeviceService to fully initialize. This is likely a bug in CoreDevice. (com.apple.coredevice.devicectl error 1 (0x01))"
+        let error = CoreDevice.commandFailure(["list", "devices"], exitCode: 1, output: raw)
+        XCTAssertEqual(error.code, "coredevice_initialization_timeout")
+        XCTAssertTrue(error.description.contains("list devices"))
+        XCTAssertTrue(error.description.contains(raw))
+        XCTAssertTrue(error.description.contains("approved host permissions"))
+        XCTAssertTrue(error.description.contains("does not establish"))
+    }
+
+    func testPermissionDenialIsDistinctFromUnknownCoreDeviceFailure() {
+        let denied = CoreDevice.commandFailure(["device", "info", "details", "--device", "test"],
+                                               exitCode: 1, output: "Operation not permitted")
+        XCTAssertEqual(denied.code, "coredevice_access_denied")
+        XCTAssertTrue(denied.description.contains("device info details"))
+        XCTAssertTrue(denied.description.contains("Operation not permitted"))
+        let other = CoreDevice.commandFailure(["device", "info", "apps"], exitCode: 70, output: "Device not found")
+        XCTAssertEqual(other.code, "coredevice_failed")
+        XCTAssertTrue(other.description.contains("70"))
+        XCTAssertTrue(other.description.contains("Device not found"))
+        XCTAssertFalse(other.description.contains("approved host permissions"))
+    }
+
+    func testFailureClassificationUsesFullLogButBoundsReturnedEvidence() {
+        let prefix = "Timed out waiting for CoreDeviceService to fully initialize.\n"
+        let output = prefix + String(repeating: "diagnostic detail\n", count: 500) + "last error line"
+        let error = CoreDevice.commandFailure(["device", "info", "lockState"], exitCode: 1, output: output)
+        XCTAssertEqual(error.code, "coredevice_initialization_timeout")
+        XCTAssertTrue(error.description.contains("device info lockState"))
+        XCTAssertTrue(error.description.hasSuffix(String(output.suffix(4000))))
+        XCTAssertLessThan(error.description.count, 5000)
+        XCTAssertEqual(CoreDevice.commandFailure(["list", "devices"], exitCode: 1,
+            output: "Timed out connecting to a device").code, "coredevice_failed")
+        XCTAssertEqual(CoreDevice.commandFailure(["list", "devices"], exitCode: 1,
+            output: "PERMISSION DENIED").code, "coredevice_access_denied")
+    }
+
     func testDeviceIDsAndConnectionFactsDoNotInventReadiness() throws {
         let result = try DeviceDiscovery.devices(from: ["devices": [
             ["identifier": "core-z", "hardwareProperties": ["udid": "udid-z", "platform": "iOS", "deviceType": "iPhone"],

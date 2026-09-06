@@ -118,14 +118,27 @@ struct Observe: ParsableCommand {
 }
 
 struct Inspect: ParsableCommand {
-    static let configuration = CommandConfiguration(abstract: "Read a cached observation or subtree without recapturing or renewing references.")
+    static let configuration = CommandConfiguration(
+        abstract: "Read or search a cached observation or subtree without recapturing or renewing references.",
+        discussion: "Use --query to search all captured nodes before pagination, including nodes omitted from observe's text. "
+            + "Matches include references, frames in screen points and parent references. Search does not prove visibility or clickability. "
+            + "A truncated source may omit the target; inspect cannot fetch missing source data. "
+            + "For an already known element, inspect its reference directly instead of paging the whole tree.")
     @OptionGroup var options: SessionOptions
     @Argument(help: "Observation or element reference, such as o1 or o1:e2.") var reference: String
-    @Option(help: "Node offset within the cached subtree, returned by a previous inspect page.") var offset = 0
+    @Option(help: "Case-insensitive substring of label, identifier, value or role; 1–256 UTF-8 bytes, no control characters or blank-only text.") var query: String?
+    @Option(help: "Node offset, or match offset with --query, returned by the previous inspect page.") var offset = 0
     mutating func run() throws {
         let session = try options.requiredSession()
+        var fields: [String: Any] = ["reference": reference, "offset": offset]
+        fields["query"] = query
         try output(compact: true) {
-            try SessionClient.call(session: session, operation: "inspect", fields: ["reference": reference, "offset": offset])
+            let response = try SessionClient.call(session: session, operation: "inspect", fields: fields)
+            if let query, response["ok"] as? Bool == true,
+               (response["result"] as? [String: Any])?["query"] as? String != query {
+                throw SomaError("inspect_query_unsupported", "Session host did not confirm this query; disconnect and connect using the current CLI, then observe again")
+            }
+            return response
         }
     }
 }

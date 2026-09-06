@@ -34,6 +34,22 @@ agentsoma --session "$SESSION" disconnect
 
 每次 apps 都重新查询安装列表；它不是 AX 观察，也不缓存 App 清单快照。查询之间发生安装或卸载可能改变后续分页位置。成功查询在完成时续期，参数错误、越界或底层查询失败不续期；所有查询均保留已有观察引用。只读查询不会向 Runner 发命令，也不会操作设备 UI。临时原生 JSON 和日志在调用结束后删除；连接预检仍保留在会话诊断目录。
 
+## 接入失败诊断
+
+CoreDevice 的非零退出保留原始日志末尾最多 4000 个字符，并在错误消息中注明失败阶段（例如 `list devices`、`device info details`、`device info lockState`、`device info apps`）和退出码。错误分类依据完整日志，截取日志尾部不会改变分类。
+
+| 错误码 | 依据与下一步 |
+| --- | --- |
+| `coredevice_initialization_timeout` | 原始输出包含 CoreDeviceService 初始化超时。它不能证明设备断开、服务损坏或沙盒限制中的哪一种原因。若调用在沙盒内，先通过调用工具的授权机制，用允许 CoreDevice 通信的本机执行环境对照一次只读 `agentsoma devices`。 |
+| `coredevice_access_denied` | 原始输出包含 `Operation not permitted` 或 `Permission denied`，大小写不敏感。先检查本机执行权限；在受限环境中，同样先对照一次只读 devices。它不表示 CLI 已自动提权，也不证明一定是某一种沙盒机制。 |
+| `coredevice_failed` | 其他原生失败，按实际阶段、退出码和原始错误排查，不归入权限或初始化问题。 |
+
+成功发现设备后，再根据 devices 返回的信息和原始任务继续 connect。若允许通信的执行环境中仍失败，应继续使用实际错误定位设备连接、配对或开发服务问题；不要反复执行同一失败命令、直接跳到 connect 重复相同预检，或默认重启系统服务。AgentSoma 不自动重试、提权或重启服务。
+
+这些诊断同样适用于 connect 的 CoreDevice 预检，以及 apps/open 的安装清单查询；沿用现有的错误消息传播和动作三态规则。仅修改了 CLI/宿主代码，重新 `swift build` 并用新 CLI 建立会话即可，Runner 协议没有变化。
+
+2026-09-06 验证：新增分类测试覆盖真实初始化超时文本、明确权限拒绝、未知错误和长日志；同轮完整 `swift test` 为 81 项通过。实际只读 devices 在沙盒内返回新的 `coredevice_initialization_timeout` 及排查提示，经调用工具授权后在沙盒外执行同一命令成功返回设备清单，未重启系统服务或启动设备 Runner。
+
 ## 打开已安装 App
 
 open 已移除 Fixture/Calculator 白名单。Mac 在派发前重新查询安装列表，按 bundle ID 精确核对。未列出的 App 返回 `app_not_installed`、`outcome=not_dispatched`、`requiresObservation=false`，原引用保留；查询失败同样不能冒充已派发或已完成。

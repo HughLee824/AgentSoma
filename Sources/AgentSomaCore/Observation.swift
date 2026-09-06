@@ -106,18 +106,33 @@ final class ObservationCache {
         return result(entries.last!, detail: nil)
     }
 
-    func inspect(_ reference: ObservationReference, offset: Int) throws -> [String: Any] {
+    func inspect(_ reference: ObservationReference, offset: Int, query: String? = nil) throws -> [String: Any] {
+        if let query {
+            guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, query.utf8.count <= 256,
+                  query.rangeOfCharacter(from: .controlCharacters) == nil else {
+                throw SomaError("invalid_inspect_query", "Query must be 1–256 UTF-8 bytes without control characters or blank-only text")
+            }
+        }
         guard let entry = entries.first(where: { $0.id == reference.observation }) else {
             throw SomaError("observation_unavailable", "Snapshot is no longer cached; observe again for new data")
         }
         if let node = reference.node, !entry.capture.nodes.indices.contains(node) {
             throw SomaError("node_not_captured", "This node was not captured; inspect cannot fetch missing source data")
         }
-        let indices = subtree(entry.capture.nodes, root: reference.node)
-        guard offset >= 0, offset < indices.count || (offset == 0 && indices.isEmpty) else {
-            throw SomaError("invalid_offset", "Offset must address a node in this cached subtree")
+        var indices = subtree(entry.capture.nodes, root: reference.node)
+        if let query {
+            indices = indices.filter { index in
+                let node = entry.capture.nodes[index]
+                let value = node.value.map { ($0 as? String) ?? quoted($0) } ?? ""
+                return [node.label, node.identifier, value, node.role].contains {
+                    $0.range(of: query, options: .caseInsensitive) != nil
+                }
+            }
         }
-        return result(entry, detail: (reference, indices, offset))
+        guard offset >= 0, offset < indices.count || (offset == 0 && indices.isEmpty) else {
+            throw SomaError("invalid_offset", "Offset must address a \(query == nil ? "node" : "match") in this cached subtree")
+        }
+        return result(entry, detail: (reference, indices, offset, query))
     }
 
     // A current reference is only a candidate: the backend must validate it on the live device.
@@ -234,7 +249,7 @@ final class ObservationCache {
         return nodes.indices.filter { included.contains($0) }
     }
 
-    private func result(_ entry: Entry, detail: (ObservationReference, [Int], Int)?) -> [String: Any] {
+    private func result(_ entry: Entry, detail: (ObservationReference, [Int], Int, String?)?) -> [String: Any] {
         let capture = entry.capture
         let metadata = capture.metadata
         let screenshot = entry.directory.appendingPathComponent("screen.png").path
@@ -248,21 +263,38 @@ final class ObservationCache {
         let footer = "snapshot=\(quoted(snapshot)) (cached source; inspect \(entry.id) for details)"
         var body: [String] = []
         var nextOffset: Int?
-        if let (reference, indices, offset) = detail {
+        if let (reference, indices, offset, query) = detail {
+            let target = reference.node.map { "\(entry.id):e\($0 + 1)" } ?? entry.id
+            // A continuation is shell text, not JSON: preserve literal quotes, $, and backticks.
+            let queryOption = query.map { " --query '" + $0.replacingOccurrences(of: "'", with: "'\\''") + "'" } ?? ""
+            if let query {
+                lines.append("inspect=\(target) query=\(quoted(query)) offset=\(offset) matched_nodes=\(indices.count) searched_nodes=\(subtree(capture.nodes, root: reference.node).count)")
+                if indices.isEmpty { lines.append("no_matches_in_capture=true; this does not prove absence from the UI") }
+            } else {
+                lines.append("inspect=\(target) offset=\(offset) captured_nodes=\(indices.count)")
+            }
             for (position, index) in indices.enumerated().dropFirst(offset) {
                 let node = capture.nodes[index]
                 var attributes = node.attributes
                 attributes["ref"] = "\(entry.id):\(node.ref)"
                 attributes["role"] = node.role
+                if query != nil {
+                    attributes["parentRef"] = node.parent.map { "\(entry.id):e\($0 + 1)" } as Any? ?? NSNull()
+                    attributes.removeValue(forKey: "index"); attributes.removeValue(forKey: "parent")
+                    for key in ["label", "identifier", "value"] {
+                        if let value = attributes[key] as? String, value.count > 160 {
+                            attributes[key] = String(value.prefix(160)) + "…"
+                            attributes["detail_clipped"] = true
+                        }
+                    }
+                }
                 var line = String(decoding: (try? jsonData(attributes)) ?? Data(), as: UTF8.self)
                 if line.utf8.count > 4096 { line = "[\(node.ref)] detail_exceeds_budget; full attributes in snapshot file" }
-                if body.count == 20 || !fits(lines + body + [line, footer], reserve: 400) { nextOffset = position; break }
+                if body.count == 20 || !fits(lines + body + [line, footer], reserve: 400 + queryOption.utf8.count) { nextOffset = position; break }
                 body.append(line)
             }
-            let target = reference.node.map { "\(entry.id):e\($0 + 1)" } ?? entry.id
-            lines.append("inspect=\(target) offset=\(offset) captured_nodes=\(indices.count)")
             lines += body
-            if let nextOffset { lines.append("more: inspect \(target) --offset \(nextOffset) (same cached snapshot)") }
+            if let nextOffset { lines.append("more: inspect \(target)\(queryOption) --offset \(nextOffset) (same cached snapshot)") }
         } else {
             let compact = CompactAX.render(capture.nodes)
             var shown = 0
@@ -272,12 +304,16 @@ final class ObservationCache {
                 shown += 1
             }
             lines += body
-            if shown < compact.count { lines.append("unexpanded=\(compact.count - shown) lines; inspect \(entry.id) (same cached snapshot)") }
+            if shown < compact.count {
+                lines.append("unexpanded=\(compact.count - shown) lines; inspect \(entry.id) --query TEXT searches all captured nodes; inspect an element reference for its subtree")
+            }
         }
         if metadata["sourceTruncated"] as? Bool == true { lines.append("source_missing=true; uncaptured nodes cannot be expanded from this snapshot") }
         lines.append(footer)
-        return ["observation": entry.id, "refs": entry.validity, "screenshot": screenshot, "snapshot": snapshot,
-                "text": lines.joined(separator: "\n")]
+        var response: [String: Any] = ["observation": entry.id, "refs": entry.validity, "screenshot": screenshot, "snapshot": snapshot,
+                                      "text": lines.joined(separator: "\n")]
+        if let query = detail?.3 { response["query"] = query }
+        return response
     }
 
     private func fits(_ lines: [String], reserve: Int) -> Bool { lines.joined(separator: "\n").utf8.count + reserve <= 8192 }

@@ -7,11 +7,31 @@
 ```sh
 agentsoma --session "$SESSION" observe
 agentsoma --session "$SESSION" inspect o2:e9
+agentsoma --session "$SESSION" inspect o2 --query Calendar
+agentsoma --session "$SESSION" inspect o2:e9 --query scroll_view
 agentsoma --session "$SESSION" inspect o2
 agentsoma --session "$SESSION" inspect o2 --offset 20
 ```
 
 `observe` 成功时直接输出多行文本及 PNG 路径；agent 需要用本地读图能力打开 PNG。`inspect` 成功时输出缓存上下文及按需展开的节点属性。失败仍为单行 JSON，退出码为 1。本地 IPC 保留 JSON 结构，CLI 不把逐节点 JSON 作为默认观察输出。
+
+## 搜索缓存中的目标
+
+`inspect oN --query TEXT` 先搜索该观察的全部已采集节点，再输出最多 20 个匹配项/8 KiB；传元素引用时仅搜索该节点及其已采集子树。查询对原始 label、identifier、value 和 role 做不区分大小写的子串匹配，包含 observe 文本折叠或截短掉的属性。每个来源节点最多匹配一次；同名父子节点和同名控件仍是不同结果，不自动合并或选出唯一目标。
+
+匹配行带有完整 `ref`、`role`、屏幕点 `frame` 和 `parentRef`，并保留源类型、enabled、名称和值。长文本属性显示前 160 个字符并标记 `detail_clipped=true`，匹配本身使用未截短的属性；完整属性可再直接 inspect 返回的元素引用。匹配不意味着元素可见、可点击或仍可操作。
+
+输出头部的 `matched_nodes` 是全部匹配数，`searched_nodes` 是搜索范围内已采集节点数。`--offset` 在查询模式下是**匹配列表**的偏移；继续使用返回的 `more: inspect ... --query ... --offset ...`，该命令保留原始查询。IPC result 同时返回实际采用的 `query`，CLI 核对它；旧宿主若忽略了参数，返回 `inspect_query_unsupported`，需用新 CLI 重新 connect 后 observe，不需要因此重建兼容的 Runner。
+
+- `unexpanded`：默认文本预算未显示完，可以查询或直接展开已知元素。
+- `no_matches_in_capture=true`：搜索范围的已缓存数据中没有匹配，不证明界面上没有该目标。
+- `source_missing=true`：源采集不完整，查询或 inspect 都无法补取缺失部分；`ax=unavailable` 同样不能支持目标不存在的结论。
+
+查询成功（包括零匹配）沿用 inspect 的续期规则，不请求 Runner、不新增观察 ID、不改变引用资格，也不修改磁盘快照。缓存淘汰后不能继续查询。query 须为 1–256 UTF-8 字节，拒绝控制字符和纯空白，非法值返回 `invalid_inspect_query`；越界偏移返回 `invalid_offset`。未提供 `--query` 时保留原有详细属性和节点分页。
+
+调用方已知引用时应直接 `inspect oN:eN`，不要从整棵树逐页查几何信息；尚未找到目标时用查询。`inspect oN | rg TEXT` 仅搜索那一页输出。若截图已明确显示目标位置，可通过已有的受守卫约束坐标动作继续；不必为找到一个 AX 名称而反复读取无关页。
+
+2026-09-06 验证：同轮完整 `swift test` 为 81 项通过。新增测试覆盖第 186 个节点的定位、长属性原文匹配与几何保留、同名来源节点、子树限制、匹配分页及 shell 特殊字符原样续页、源截断/AX 不可用、缓存淘汰、引用状态与续期规则。真实 CLI 配合本地模拟 IPC 的 5 项检查通过，覆盖参数传输、默认 inspect、旧宿主、查询回显不一致及原有错误传播；没有操作设备 UI。
 
 [完整 CLI 输出样例](examples/observe/observe.cli.example.txt) 来自本次 Calculator 的 o4，未经改写。文件里的临时路径随会话关闭已失效；实验副本在下方证据目录。实际采集的部分正文如下：
 

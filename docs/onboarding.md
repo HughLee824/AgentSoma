@@ -42,7 +42,7 @@ swift build
 
 `SIGNED_XCTESTRUN` 使用构建结果的 `result.xctestrun`。`connect` 用 Xcode 安装并启动 Runner；之后继续使用已验证的 CoreDevice 原生链路。断开会话停止进程并释放观察缓存，签名构建和手机上的 Runner 保留以便复用。
 
-每次构建分配一个新的目录，避免覆盖活跃会话引用的文件。源码、Xcode 或签名发生变化后重新构建，并将新路径用于下一次 connect。相同构建可供后续会话复用；不需要每次连接都编译。构建目录暂时不自动清理，确认没有会话引用后可移除不再需要的目录。上述独立目录、CLI 名称与路径字段是工程实现选择。
+每次构建分配一个新的目录，避免覆盖活跃会话引用的文件。Runner 及其共享源码、Xcode 或签名发生变化后重新构建，并将新路径用于下一次 connect；仅 CLI/宿主代码变化时运行 `swift build` 后建立新会话即可。相同的兼容 Runner 构建可供后续会话复用；不需要每次连接都编译。构建目录暂时不自动清理，确认没有会话引用后可移除不再需要的目录。上述独立目录、CLI 名称与路径字段是工程实现选择。
 
 ## 常见接入错误
 
@@ -52,7 +52,11 @@ swift build
 | `invalid_team` / `invalid_bundle_id` | 修正签名参数；team 是 10 位开发团队 ID，bundle ID 是点分隔标识。 |
 | `runner_build_failed` | 阅读返回路径中的 `build.log`。若提示缺少开发团队/profile，在 Xcode 完成签名；若选中的是 Command Line Tools，切换到完整 Xcode。构建错误不一概归因于签名。 |
 | `runner_products_invalid` / `runner_signature_invalid` | 检查当前源码、构建日志和产物；重新构建，使用新的输出路径。 |
-| `runner_needs_rebuild` | 当前 CLI 要求含 Return 的 `actionVersion=2`。重新 build-runner，将新的 xctestrun 路径用于 connect；旧的成功构建不自动更新。 |
+| `runner_needs_rebuild` | 当前 CLI 要求支持可控拖动的 `actionVersion=5`。重新 build-runner，将新的 xctestrun 路径用于 connect；旧的成功构建不自动更新。 |
+| `coredevice_initialization_timeout` | 若在沙盒内，先通过调用工具的授权机制，在允许 CoreDevice 通信的本机环境中对照一次只读 devices，再定位原因；不单凭超时断定服务损坏。见[接入诊断](discovery.md#接入失败诊断)。 |
+| `coredevice_access_denied` | 原始命令输出明确拒绝访问。检查本机执行权限，再做一次只读 devices 对照。 |
+| `coredevice_failed` | 读取错误中的失败阶段、退出码和原始信息；未知错误不自动归因于权限。 |
+| `inspect_query_unsupported` | 当前会话宿主未确认查询参数。用新 CLI 重新 connect、observe 后查询；不需要因此重建兼容的 Runner。 |
 | `device_locked` | 解锁手机后重新 connect。 |
 | `runner_start_failed` / `coredevice_unavailable` | 查看返回的会话日志，核对设备信任、Developer Mode、USB 和开发服务状态。构建成功不等于设备侧安装或启动已成功。 |
 

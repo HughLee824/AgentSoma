@@ -21,12 +21,33 @@ enum CoreDevice {
         process.waitUntilExit()
         guard process.terminationStatus == 0 else {
             let detail = (try? String(contentsOf: logURL, encoding: .utf8)) ?? ""
-            throw SomaError("coredevice_failed", "CoreDevice command failed (\(process.terminationStatus)): \(detail.suffix(4000))")
+            throw commandFailure(arguments, exitCode: process.terminationStatus, output: detail)
         }
         guard let result = try jsonObject(Data(contentsOf: resultURL))["result"] as? [String: Any] else {
             throw SomaError("invalid_discovery", "CoreDevice did not return a result object")
         }
         return result
+    }
+
+    static func commandFailure(_ arguments: [String], exitCode: Int32, output: String) -> SomaError {
+        let operation = arguments.prefix { !$0.hasPrefix("--") }.joined(separator: " ")
+        let detail = output.lowercased()
+        let code: String
+        let guidance: String
+        if detail.contains("operation not permitted") || detail.contains("permission denied") {
+            code = "coredevice_access_denied"
+            guidance = "Access was denied; check host execution permissions. If running in a restricted context, "
+                + "retry read-only 'agentsoma devices' once with approved host permissions before retrying this operation. "
+        } else if detail.contains("timed out waiting for coredeviceservice to fully initialize") {
+            code = "coredevice_initialization_timeout"
+            guidance = "This timeout does not establish that the device is disconnected or the service is broken. "
+                + "A restricted host execution context can also cause it. If running in a sandbox, compare read-only "
+                + "'agentsoma devices' once with approved host permissions before repeating failed commands or restarting services. "
+        } else {
+            code = "coredevice_failed"
+            guidance = ""
+        }
+        return SomaError(code, "CoreDevice failed during '\(operation)' (exit \(exitCode)). \(guidance)Original error: \(output.suffix(4000))")
     }
 }
 

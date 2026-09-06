@@ -110,6 +110,9 @@ final class SessionHost {
                 guard let offset = request["offset"] as? Int, offset >= 0 else {
                     throw SomaError("invalid_offset", "A nonnegative offset is required")
                 }
+                guard request["query"] == nil || request["query"] is String else {
+                    throw SomaError("invalid_inspect_query", "Query must be text")
+                }
             } catch {
                 reject((error as? SomaError)?.code ?? "invalid_reference", String(describing: error))
                 return
@@ -144,7 +147,8 @@ final class SessionHost {
                     response["result"] = try observations.store(backend.observe())
                     effective = true
                 case "inspect":
-                    response["result"] = try observations.inspect(reference!, offset: request["offset"] as! Int)
+                    response["result"] = try observations.inspect(reference!, offset: request["offset"] as! Int,
+                                                                  query: request["query"] as? String)
                     effective = true
                 case "tap", "swipe", "type", "press":
                     let target = try observations.resolveTarget(for: action!)
