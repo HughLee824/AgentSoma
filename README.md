@@ -1,91 +1,231 @@
 # AgentSoma
 
-AgentSoma 为外部 agent 提供操作真实 iPhone 的眼睛和手。自然语言理解、任务规划和结果判断由调用 agent 负责。
+**Eyes and hands for AI agents operating a real iPhone.**
 
-发布形态为预编译 macOS CLI 和配套 iOS Runner，用户在本机重签部署。调用链为：
+**English** · [简体中文](README.zh-CN.md)
 
-```text
-agent → agentsoma CLI → 按会话运行的 Swift 宿主 → CoreDevice IPv6 → 薄 XCTest Runner
-```
+[![CI](https://github.com/HughLee824/AgentSoma/actions/workflows/ci.yml/badge.svg)](https://github.com/HughLee824/AgentSoma/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Swift](https://img.shields.io/badge/Swift-5.9%2B-F05138.svg)](Package.swift)
 
-## 安装与使用
+AgentSoma is a macOS CLI that lets an external agent discover apps, read screenshots and accessibility data, and interact with a connected iPhone. Your agent handles natural language, planning, and judging results; AgentSoma provides device observations and actions through a persistent XCTest session.
 
-当前开发环境为 macOS 15.0.1、Xcode 16.0 / Swift 6.0，真机为 iOS 26.6。Swift 包的 macOS 13 部署目标是编译下限，尚不代表完整设备链路在 macOS 13 上经过验证。
+An agent needs local command execution and the ability to read PNG files. The device control path runs locally on your Mac and iPhone.
 
-分发渠道为 [GitHub Releases](https://github.com/HughLee824/AgentSoma/releases) 和 [Homebrew Tap](https://github.com/HughLee824/homebrew-tap)，采用 MIT 许可证。当前正在准备首次公共发布；稳定版 Release 与 Tap 更新后，可用 `brew install HughLee824/tap/agentsoma` 安装。也可下载同一 Release 的 tar.gz 和 SHA-256 文件，校验后解压完整目录。首批预编译包面向 Apple Silicon / macOS 15 及以上。
+[Quick start](#quick-start) · [Commands](#commands) · [How it works](#how-it-works) · [Documentation](#documentation) · [Contributing](#contributing)
 
-安装、升级和卸载步骤见[安装说明](docs/install.md)。用户运行不需要源码仓库、Swift Package Manager、Python、Node、iproxy 或 pymobiledevice3。维护者的构建、发布草稿和 Tap 更新流程见 [Release 与 setup](docs/release-setup.md)。
+## Why AgentSoma?
 
-首次使用仍需完整 Xcode、可用的 Apple Development 私钥及匹配 iPhone 的 development profile，并让设备信任 Mac、启用 Developer Mode。`setup` 只重签预编译 Runner，不编译源码，也不登录 Apple 账号。具体步骤与签名准备见[首次接入](docs/onboarding.md)。以下命令由外部 agent 执行：
+- **See the screen and its structure.** Observations return a PNG path, compact accessibility (AX) text, and element references. Expand or search cached snapshots with `inspect`.
+- **Act on real apps.** Discover installed apps, bring them to the foreground, tap, swipe, drag, edit text, and send Return.
+- **Reuse the device session.** Independent CLI calls share one Mac host and iPhone Runner. `connect` manages startup; `disconnect` or idle expiry releases the session.
+- **Know what happened.** Actions distinguish `completed`, `not_dispatched`, and `unknown`. Tap and swipe check the screen before dispatch; input actions check frame stability afterward.
+- **Use a small native stack.** Swift, Apple's device tooling, and a thin XCTest Runner. The runtime needs no Python, Node.js, WebDriverAgent, `iproxy`, or `pymobiledevice3`.
+
+## Quick start
+
+### Prerequisites
+
+| Requirement | Details |
+| --- | --- |
+| Mac and Xcode | Full Xcode selected as the active developer toolchain. Command Line Tools alone are insufficient. |
+| Physical iPhone | Connect over USB, trust the Mac, enable Developer Mode, and keep the device unlocked. |
+| Development signing | An Apple Development certificate with its private key, plus an iOS development provisioning profile matching the device and Runner bundle ID. |
+
+The documented test environment is **Apple Silicon · macOS 15.0.1 · Xcode 16.0 / Swift 6.0 · iPhone 12 Pro / iOS 26.6**, using an existing paid development team's signing credentials. Free Personal Team setup and renewal have not been validated. See [current limitations](#current-limitations) for compatibility boundaries.
+
+### 1. Install and connect
+
+Choose the source workflow for development, or the packaged workflow when release assets are available. They prepare the Runner differently.
+
+#### From source
 
 ```sh
-agentsoma --version
+git clone https://github.com/HughLee824/AgentSoma.git
+cd AgentSoma
+swift build
+export PATH="$PWD/.build/debug:$PATH"
+
+agentsoma --help
 agentsoma devices
+```
+
+Complete the [source signing setup](docs/onboarding.md#源码开发入口) in Xcode, then fill in your team ID and the device ID returned by `devices`:
+
+```sh
+export APPLE_TEAM_ID="YOUR_TEAM_ID"
+export IOS_UDID="DEVICE_ID_FROM_DEVICES"
+
+agentsoma build-runner --team "$APPLE_TEAM_ID"
+
+# Copy result.xctestrun from the successful build-runner response.
+export SIGNED_XCTESTRUN="/absolute/path/from/build-runner.xctestrun"
+agentsoma connect --device "$IOS_UDID" --xctestrun "$SIGNED_XCTESTRUN"
+```
+
+`build-runner` builds and verifies the signed Runner using the repository's standalone Xcode project. Reuse a compatible build for later connections; rebuild after changing the Runner, its shared code, Xcode, or signing configuration.
+
+#### From a release package
+
+The distribution workflow targets **Apple Silicon / macOS 15+**. The repository's [release notes](docs/release-setup.md) dated September 6, 2026 record the first public release as pending. Once a stable release and Tap formula are published:
+
+```sh
+brew install HughLee824/tap/agentsoma
+agentsoma --version
+```
+
+Alternatively, download the archive and matching SHA-256 file from [GitHub Releases](https://github.com/HughLee824/AgentSoma/releases), verify them, and retain the full package directory. See the [installation guide](docs/install.md) for manual installation, upgrades, and removal.
+
+```sh
+agentsoma devices
+export IOS_UDID="DEVICE_ID_FROM_DEVICES"
+
 agentsoma setup --device "$IOS_UDID"
 agentsoma connect --device "$IOS_UDID"
+```
 
-# 使用 connect 实际返回的 session。
+`setup` re-signs the precompiled Runner locally and verifies a device handshake, screenshot capture, and clean shutdown before saving preparation state. It does not compile source, log in to Apple, or create certificates or profiles. Use `--profile`, `--team`, or `--identity` to resolve signing selection; see [onboarding](docs/onboarding.md).
+
+### 2. Observe, act, verify
+
+After either connection workflow, copy the `session` value returned by `connect`:
+
+```sh
+export SESSION="SESSION_FROM_CONNECT"
+
 agentsoma --session "$SESSION" status
 agentsoma --session "$SESSION" apps --query Settings
 agentsoma --session "$SESSION" open com.apple.Preferences
 agentsoma --session "$SESSION" observe
-# agent 读取返回的 PNG；使用实际返回的观察 / 元素引用。
+```
+
+Read the PNG at the returned `screenshot` path alongside the AX text. The IDs below are illustrative: replace them with references from your actual observation.
+
+```sh
+# Search the captured snapshot, or inspect a known element directly.
+agentsoma --session "$SESSION" inspect o1 --query General
 agentsoma --session "$SESSION" inspect o1:e9
-# 每次动作使用最新观察中实际取得的引用，完成后再次 observe。
+
+# Use a current reference, then observe again to verify the result.
 agentsoma --session "$SESSION" tap o1:e9
 agentsoma --session "$SESSION" observe
+
+# Release the session when finished.
 agentsoma --session "$SESSION" disconnect
 ```
 
-`setup` 自动选择匹配设备、bundle ID 和可见开发证书的 profile；有歧义时用 `--team`、`--identity` 或 `--profile` 明确选择。它在真实握手、截图采集和正常退出成功后保存准备状态。重复 setup 会复用有效签名产物并再次验证；日常 `connect` 使用已准备的 Runner，无需传入 `.xctestrun` 或搜索 `.build`。配套 Runner 变化、签名到期或产物损坏时会明确要求重新 setup。见[升级与续签](docs/onboarding.md#升级与续签)。
+The working loop is **observe → read the screenshot → inspect if needed → act → observe again**. A completed action does not establish that the agent's task succeeded.
 
-`connect` 通过 Xcode 的 `test-without-building` 安装并启动 Runner，在宿主和 Runner 均可响应后返回，agent 不需要单独启动后台服务。每条 CLI 命令结束后，宿主继续持有原 XCTest 会话。会话结束后，宿主释放自己的 xcodebuild/Runner 资源并退出。
+## Commands
 
-当前提供 `setup`、`build-runner`（源码开发）、`devices`、`connect`、`status`、`apps`、`open`、`observe`、`inspect`、`tap`、`swipe`、`type`、`press`、`disconnect`。`devices` 返回 CoreDevice 已知设备和原生连接状态，connect 检查是否能建立会话；`apps` 查询已安装 App 的名称和 bundle ID，支持 `--query` 筛选，每页最多 50 项，按返回的 `nextOffset` 继续读取。见 [发现接口与完整调用验收](docs/discovery.md)。
+Use `agentsoma --help` or `agentsoma <command> --help` for all options. Session commands use `agentsoma --session "$SESSION" <command>`.
 
-CoreDevice 接入失败会返回失败阶段和原始错误：`coredevice_initialization_timeout` 表示服务初始化超时，`coredevice_access_denied` 表示原始输出包含明确的权限拒绝，其余保留 `coredevice_failed`。沙盒内发生初始化超时或权限拒绝时，先通过调用工具的授权机制，在允许 CoreDevice 通信的本机环境中对照执行一次只读 `devices`，再决定后续操作；不要仅凭超时或 USB 可见就确诊服务故障，也不要连续重试或默认重启服务。详见 [接入诊断](docs/discovery.md#接入失败诊断)。
+| Command | Purpose |
+| --- | --- |
+| `devices` | List devices known to CoreDevice and their native connection state. |
+| `setup --device ID` | Re-sign and verify a packaged Runner for a device. |
+| `build-runner` | Build a signed Runner from source and return its `.xctestrun` path. |
+| `connect --device ID` | Start a session; optionally set `--idle-timeout 60m`. |
+| `status` | Check session health and remaining idle time without renewing it. |
+| `apps [--query TEXT]` | Find installed apps by name or bundle ID; follow `nextOffset` for more results. |
+| `open BUNDLE_ID` | Launch or activate an installed app. |
+| `observe` | Capture a PNG and compact AX text with new references. |
+| `inspect REF [--query TEXT]` | Read or search a cached observation or subtree. |
+| `tap REF` | Tap an element, or use an observation ID with `--x X --y Y`. |
+| `swipe REF --direction up` | Swipe an element; explicit endpoints, velocity, and hold durations are also supported. |
+| `type REF --mode replace --text TEXT` | Replace text, or use `--mode insert` at an already focused caret. `--stdin` accepts UTF-8 from a file or pipe. |
+| `press REF --key return` | Send Return to an already focused text input. |
+| `disconnect` | Finish accepted commands and clean up the session. |
 
-`open` 已移除临时 App 白名单；宿主先检查安装状态，再由 Runner 激活已运行的 App，未运行时启动。未安装的 App 在派发前拒绝。`observe` 返回截图路径及紧凑 AX 文本，`inspect` 展开同一缓存快照；动作在设备端确认目标后执行。见 [观察契约](docs/observations.md) 和 [动作接口与验收](docs/actions.md)。
+Coordinates use **screen points**, not screenshot pixels. Swipe direction describes finger movement. Text input does not submit automatically; use a separate `press` when appropriate. See [actions](docs/actions.md) for text limits, dragging, and examples.
 
-查找默认观察文本中未显示的目标时，用 `inspect oN --query Calendar` 搜索整个已缓存快照；查询对 label、identifier、value 和 role 做不区分大小写的子串匹配，先匹配再分页，返回元素引用、frame 和父级引用。已有引用则直接 `inspect oN:eN`，例如检查滚轮子树，无需从整棵树的第一页开始翻。`inspect oN | rg Calendar` 只搜索一页输出。无匹配与 `source_missing=true` 分别表示缓存中没找到、源采集不完整；若截图已足以定位，可使用现有画面守卫约束下的坐标动作。查询不重新观察，也不恢复旧引用。使用新 CLI 建立的宿主支持该查询；旧宿主未确认查询时返回 `inspect_query_unsupported`，需重新 connect/observe，可复用协议兼容的 Runner。
+## Agent integration
 
-`type oN:eN --mode insert --text ...` 保留现有光标，需要输入框已有键盘焦点；需要聚焦时先 tap、再 observe。`--mode replace` 聚焦并替换全部内容，空字符串表示清空，两种模式都不自动提交。文本源也可选 `--stdin < text.txt`，与 `--text` 互斥，按原文读取 UTF-8 至 EOF；仍限制 4096 字节并拒绝末尾换行。`press oN:eN --key return` 使用已有焦点发送独立 Return，完成后重新 observe 核对效果。`swipe oN:eN --direction up` 的方向表示手指移动方向；坐标点击使用 `tap oN --x X --y Y`，单位为屏幕点。
+Successful `observe` and `inspect` commands print multiline text. Other results and runtime errors use single-line JSON. Success exits with `0`; runtime failure exits with `1`. Argument syntax errors are reported on stderr with a nonzero exit code.
 
-`tap/swipe` 在输入前检查 App/弹窗及屏幕上下文，并比较整屏与操作区域的截图指纹；通过后直接执行宿主提供的坐标，不再依赖 identifier/label 唯一性。可用 `--max-screen-change`、`--max-region-change` 设置变化比例阈值，用 `--protect oN:eN` 增加最多三个保护区域。明确端点滑动为 `swipe oN --from-x X --from-y Y --to-x X --to-y Y`。变化超限时返回 `not_dispatched` 并要求重新 observe。参数、算法和启发式限制见 [动作前画面校验](docs/screen-guard.md)。
+For `open`, `tap`, `swipe`, `type`, and `press`, read the action outcome as well as the exit code:
 
-精细调整滚轮或拖动事件块时，`swipe` 可显式指定 `--velocity`（XCTest 速度单位，pixels/s，默认 500）、`--press-duration`（移动前按住的秒数，默认 0）、`--hold-duration`（到达终点后、抬手前停留的秒数，默认 0）。例如用当前观察确定起终点后，添加 `--velocity 100 --hold-duration 0.2` 尝试慢速微调；需要先长按再移动的控件可再添加 `--press-duration 0.5`。这些是起始尝试参数，不保证一格。`press-duration` 不是拖动耗时，单纯缩短距离也不会降低速度。参数范围、动作预算和示例见 [可控拖动](docs/actions.md#可控拖动)。
+| Outcome | Meaning | Next step |
+| --- | --- | --- |
+| `completed` | Input calls completed and, for tap/swipe/type/press, the frame passed the stability check. `open` reports launch/activation completion. | Observe and verify the intended effect. |
+| `not_dispatched` | The request was rejected before any input API call. | Read the error; correct the request or observe again. |
+| `unknown` | Input may have taken effect, but completion could not be established. | Observe first. Do not blindly repeat the action. |
 
-调用 agent 应先读实际选中值，再调整并重新 observe 核对；即使画面或值没变，已派发动作也会使旧引用失效。出现连续无变化或来回跳过目标时，更换速度、结束停留或交互方式，不要只反复猜距离。滚轮只暴露为 scroll_view 时，不能假定支持原生 picker 按值设置。使用 `inspect oN:eN` 直接读取相关控件的 frame；文字 frame 的顶边不等于时间线等业务区域的边界，须结合中心位置和截图定位。日程等范围输入应分别核对开始和结束值，不能沿用默认时长后就宣称已验证任意时长设置。
+Input actions sample the screen about every 200 ms and require at least three identical frames spanning at least 400 ms. If stability is not reached within the 5-second detection budget, the result is `unknown` / `frame_stability_timeout`, with available input facts and the last frame. This budget is not a hard timeout for the entire command.
 
-`tap/swipe/type/press` 在全部输入调用结束后自动检测画面稳定：约每 200ms 采样，至少 3 帧的全帧像素 SHA-256 一致且覆盖至少 400ms，才返回 `completed`。结果包含 `execution.inputCompleted`、`stability` 和 `frame.screenshot` 本地路径。5 秒检测预算内未稳定则返回 `unknown` / `frame_stability_timeout`，保留输入事实与最后一帧；调用 agent 先观察，不重发，也不额外猜测“等待 Lark 动画”。当前协议为 `actionVersion=5`、`observationVersion=2`、`screenGuardVersion=1`；旧 Runner 不支持速度与停留参数。发布用户须安装配套版本并 setup，源码开发者重新 build-runner，不能复用旧协议的产物。
+Keep these rules in the calling agent's workflow:
 
-调用 agent 的命令执行工具若提前返回后台任务 ID（例如 `exec_command` 的 `session_id`），必须保留完整返回对象，并通过对应的续读工具（例如 `write_stdin`）取得原命令的退出码和输出。这个 ID 属于命令执行工具，与 AgentSoma 的设备 `session` 不同。不能只打印 `output` 而丢弃任务 ID，也不能用固定 sleep 加重复 `status` 来猜测原命令是否结束。
+- **Refresh after actions.** Completed or unknown app/device actions invalidate old references. Detected target or context changes can invalidate them too. A result screenshot has no new AX references; call `observe` before the next reference-based action.
+- **Search the snapshot you have.** `inspect --query` searches all captured nodes before pagination. It neither captures missing source data nor makes stale references current.
+- **Read the image.** A path in stdout is not visual input. The agent must open the PNG with its own image-reading tool.
+- **Track command completion.** If the execution tool returns a background job ID, use its continuation mechanism to collect the original command's exit code and output. That ID is separate from AgentSoma's device `session`.
+- **Close the session.** The default idle timeout is 30 minutes. `status` does not renew it, and accepted or running commands are not interrupted by idle expiry. Disconnecting or expiring removes the socket and observation cache.
 
-## 源码开发
+Details: [observations](docs/observations.md), [actions](docs/actions.md), and [screen guard](docs/screen-guard.md).
 
-```sh
-swift build
-swift test
-.build/debug/agentsoma build-runner --team "$APPLE_TEAM_ID"
-# 使用构建结果中的实际 xctestrun 路径。
-.build/debug/agentsoma connect --device "$IOS_UDID" --xctestrun "$SIGNED_XCTESTRUN"
+## How it works
+
+```mermaid
+flowchart LR
+    Agent[External AI agent] --> CLI[agentsoma CLI]
+    CLI <-->|Unix socket| Host[Swift session host on Mac]
+    Host <-->|CoreDevice IPv6| Runner[XCTest Runner on iPhone]
+    Runner <--> Apps[iPhone apps]
 ```
 
-唯一源码库依赖是锁定为 1.5.0 的 [Swift ArgumentParser](https://github.com/apple/swift-argument-parser/tree/1.5.0)。Runner 使用仓库内的独立 Xcode 工程，不依赖 Fixture、XcodeGen 或 WDA。源码开发和发布用户的签名路径分别见[首次接入](docs/onboarding.md)。
+`connect` starts the host and uses Xcode's `test-without-building` to install and launch the Runner. It returns when both are responsive. The host retains the XCTest session between CLI calls, serializes device requests, caches observations, and manages cleanup. No separate service startup is needed.
 
-## 生命周期与输出
+Session files default to `/private/tmp/agentsoma-<uid>` with directory permissions `0700`; `AGENTSOMA_STATE_DIR` can select an alternative path. Packaged Runner preparation lives in `~/Library/Application Support/AgentSoma`. Signing private keys stay in Keychain; the device token stays in host memory and the XCTest subprocess environment.
 
-- 默认空闲 **30 分钟**；建立连接时可用 `--idle-timeout 60m` 调整，也接受 `s`、`m`、`h`，便于用短时间验收。
-- 有效 `open` 和通过本地引用解析的动作请求完成后续期，包括执行结果未知的请求。参数检查或本地引用解析失败不续期。成功的 apps / observe / inspect 也在完成后续期，失败的查询或 inspect 不续期；apps 保留观察引用。
-- 已接收、排队或执行中的命令不被空闲回收；`disconnect` 等待已经接收的命令结束，再清理会话。
-- `status` 检查 Runner 并返回剩余空闲时间，不续期。当前没有额外内部保活轮询。
-- observe / inspect 成功时输出多行文本，其余结果与运行错误为单行 JSON。成功退出码为 0，运行失败为 1；参数语法错误由 ArgumentParser 输出到 stderr 并非零退出。
-- `open`、`tap`、`swipe`、`type`、`press` 返回 `completed`、`not_dispatched` 或 `unknown`。Runner 在进入可发送输入的 API 前记录执行阶段，宿主据此区分执行前拒绝与可能已产生影响；缺失事实、连接中断或丢失响应按保守结果处理，不自动重发。
+| Location | Responsibility |
+| --- | --- |
+| [`Sources/AgentSoma`](Sources/AgentSoma) | CLI commands and argument parsing. |
+| [`Sources/AgentSomaCore`](Sources/AgentSomaCore) | Sessions, transport, observations, actions, signing, and device discovery. |
+| [`Runner`](Runner) | Thin iOS XCTest Runner and standalone Xcode project. |
+| [`Tests`](Tests) | Swift tests for host behavior and device contracts. |
+| [`scripts`](scripts) / [`packaging`](packaging) | Release packaging, verification, and Homebrew tooling. |
+| [`docs`](docs) / [`spikes`](spikes) | Technical documentation, validation records, and earlier experiments. |
 
-状态目录默认为 `/private/tmp/agentsoma-<uid>`，目录权限 0700；可通过 `AGENTSOMA_STATE_DIR` 设置较短的替代路径。每个会话包含本地 Unix socket、启动配置和诊断文件。设备 token 只保存在宿主内存及 XCTest 子进程环境，不写入配置文件或 CLI 输出。相同状态目录内对设备规范 UDID 使用系统文件锁，拒绝重复占用；锁文件保留，锁本身随持有进程退出而释放。
+## Current limitations
 
-观察默认最多 60 行、8 KiB，超预算内容明确提示并可 inspect；源采集最多 200 个节点，未采集部分不能从旧快照补取。宿主只缓存最近两次观察和最后一次动作的结果帧。open 或设备动作正常完成、结果 unknown 后旧引用失效；确认目标已变化时同样失效，读取旧快照不恢复引用。动作的稳定帧不生成 AX 或引用，后续按引用操作仍须 observe；独立 observe 的截图与 AX 分开采集，不保证原子一致或持续稳定。
+AgentSoma is in early development. Real-device validation covers the environment listed above, not every Mac, Xcode, iOS version, or app.
 
-断开或到期后 socket 和观察缓存删除，原 session 不能继续调用。诊断文件暂时保留供开发排查，清理这些文件不负责断开活跃会话。当前不承诺宿主遭 SIGKILL、Mac 重启、物理断线或设备锁屏后的自动恢复；也不依据磁盘里的 PID 自动重连或重放请求。
+- The Swift package targets macOS 13+, and the packaged Runner has an iOS 17 compilation floor. These are build limits, not claims of end-to-end support. Binary distribution targets Apple Silicon / macOS 15+.
+- Full Xcode and local development signing are required. Fresh-Mac onboarding and free Personal Team provisioning/renewal remain unverified. The Mac CLI is ad-hoc signed; Developer ID signing and notarization are not in the current release workflow.
+- Screenshot and AX capture are separate, non-atomic operations. Default observation text is capped at 60 lines / 8 KiB and source capture at 200 nodes; `inspect` cannot recover uncaptured nodes.
+- Screen guards are heuristic checks, not an atomic guarantee against an app changing before input. XCTest runtime compatibility is limited to tested configurations.
+- Automatic recovery after a killed host, Mac restart, cable disconnect, or device lock is not guaranteed. Unknown actions are not automatically replayed.
 
-需求与边界见 [alignment.md](alignment.md)，接口语义见 [接口草案](docs/agent-interface.md)。
+## Documentation
+
+Detailed guides are currently in Chinese; both README versions cover the same getting-started workflow.
+
+| Guide | Contents |
+| --- | --- |
+| [Installation](docs/install.md) | Release packages, Homebrew, upgrades, and uninstalling. |
+| [Onboarding and troubleshooting](docs/onboarding.md) | Xcode, signing, first connection, renewal, and common errors. |
+| [Device and app discovery](docs/discovery.md) | Discovery commands, pagination, and CoreDevice diagnostics. |
+| [Observations](docs/observations.md) · [Sample output](docs/examples/observe/README.md) | Screenshots, AX text, cached queries, references, and examples. |
+| [Actions](docs/actions.md) · [Screen guard](docs/screen-guard.md) | Input semantics, controlled dragging, stability, and pre-dispatch checks. |
+| [CLI architecture](docs/cli-vs-mcp.md) · [Interface design](docs/agent-interface.md) | Design decisions and interface contracts. |
+| [Release workflow](docs/release-setup.md) | Building, verifying, and distributing the CLI and Runner. |
+| [Scope and requirements](alignment.md) | Project goals, accepted decisions, and boundaries. |
+
+## Contributing
+
+Issues, focused pull requests, and reproducible device reports are welcome. For a substantial change, open an [issue](https://github.com/HughLee824/AgentSoma/issues) to discuss the scope first.
+
+Run the same checks configured in [CI](.github/workflows/ci.yml):
+
+```sh
+swift test
+python3 -m unittest discover -s scripts/tests -v
+```
+
+Python 3.9+ is used for release tooling and its tests, not the installed CLI runtime. The only Swift package dependency is [Swift ArgumentParser](https://github.com/apple/swift-argument-parser/tree/1.5.0), pinned to `1.5.0`.
+
+CI does not have a physical iPhone. For device-facing changes, also build a fresh Runner and verify the affected workflow on hardware. Include Mac/Xcode/iOS versions, reproduction steps, expected behavior, and relevant errors in reports. Remove private screen content, provisioning profiles, and signing material before sharing logs. Keep the English and Chinese READMEs in sync when changing shared instructions.
+
+## License
+
+[MIT](LICENSE) © AgentSoma contributors.
