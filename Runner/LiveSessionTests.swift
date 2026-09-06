@@ -195,7 +195,7 @@ final class LiveSessionTests: XCTestCase {
             }
             response["runnerMs"] = (ProcessInfo.processInfo.systemUptime - began) * 1000
             try await server.reply(response, to: request)
-            print("AGENTSOMA_COMMAND id=\(command["id"] ?? "missing") sequence=\(sequence) op=\(command["op"] ?? "missing") ok=\(response["ok"] ?? false) runnerMs=\(response["runnerMs"] ?? 0)")
+            print("AGENTSOMA_COMMAND id=\(command["id"] ?? "missing") sequence=\(sequence) op=\(command["op"] ?? "missing") ok=\(response["ok"] ?? false) runnerMs=\(response["runnerMs"] ?? 0) beganUptime=\(began) repliedUptime=\(ProcessInfo.processInfo.systemUptime)")
             if stopping { didShutdown = true; break }
         }
         XCTAssertTrue(didShutdown, "Session ended without an explicit shutdown command")
@@ -257,7 +257,11 @@ final class LiveSessionTests: XCTestCase {
         try checkIssues()
         guard let stateTimeout else { throw CommandError("unsupported_xctest_runtime") }
         executionStarted = true // Before entering any API that can send input, including focus/select-all.
-        stateTimeout.perform(body)
+        let began = ProcessInfo.processInfo.systemUptime
+        // Idle may exceed this short budget during normal deceleration. Avoid synchronous
+        // timeout diagnostics; the caller still checks XCTest errors and frame stability.
+        XCTestDiagnostics.withoutAutomaticSpindump { stateTimeout.perform(body) }
+        print("AGENTSOMA_INPUT beganUptime=\(began) finishedUptime=\(ProcessInfo.processInfo.systemUptime)")
         try checkIssues()       // Never continue a multi-primitive input after an XCTest failure.
     }
 

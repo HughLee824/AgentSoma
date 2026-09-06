@@ -15,9 +15,22 @@ struct ProbeView: View {
     @State private var submissions = 0
     @State private var caretPosition = -1
     @State private var mutableTitle = "Mutable A"
+    @State private var preInputRoute = "original"
+    @State private var originalTouches = 0
+    @State private var tripwireTouches = 0
     @FocusState private var editing: Bool
 
     var body: some View {
+        Group {
+            if ProcessInfo.processInfo.arguments.contains("--preinput-wait-probe") {
+                preInputWaitProbe
+            } else {
+                standardProbe
+            }
+        }
+    }
+
+    private var standardProbe: some View {
         VStack(spacing: 16) {
             Text("AgentSoma Probe").font(.title)
             TextField("Test text", text: $text)
@@ -55,7 +68,39 @@ struct ProbeView: View {
                 }
             }.accessibilityIdentifier("scroll")
         }.padding()
+            .onAppear { ScrollWaitProbe.shared.startIfRequested() }
             .sheet(isPresented: $showExtendedProbes) { ExtendedProbes() }
+    }
+
+    private var preInputWaitProbe: some View {
+        VStack(spacing: 20) {
+            Text("Pre-input wait probe").font(.title)
+            Text("Route: \(preInputRoute)").accessibilityIdentifier("preinput-route")
+            Button("Arm controlled motion") {
+                PreInputWaitProbe.shared.arm {
+                    preInputRoute = "tripwire"
+                    PreInputWaitProbe.shared.recordRouteChanged(route: preInputRoute)
+                }
+            }
+            .accessibilityIdentifier("preinput-arm")
+            PreInputSwipeSurface(route: preInputRoute) { route, phase in
+                if phase == "began" {
+                    if route == "original" { originalTouches += 1 }
+                    else { tripwireTouches += 1 }
+                }
+                PreInputWaitProbe.shared.recordTouch(route: route, phase: phase)
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 260)
+            .padding(.horizontal, 16)
+            Text("Original touches: \(originalTouches)").accessibilityIdentifier("preinput-original-touches")
+            Text("Tripwire touches: \(tripwireTouches)").accessibilityIdentifier("preinput-tripwire-touches")
+            PreInputWaitHarness().frame(width: 1, height: 1)
+        }
+        .padding()
+        .onAppear {
+            PreInputWaitProbe.shared.recordSurfaceReady(route: preInputRoute)
+        }
     }
 
     // Fixture-only control: set and report a known insertion point independently of XCTest.
