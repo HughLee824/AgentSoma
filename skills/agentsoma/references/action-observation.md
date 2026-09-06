@@ -1,6 +1,8 @@
-# Experiment: one action followed by observation
+# Fallback: one action followed by observation
 
-Use this optional Codex template for an already chosen `open`, `tap`, `swipe`, `type`, or `press`. It combines an action and the following observation into one orchestration call. The CLI and Runner remain unchanged; there is no `--observe` option. Read [the basic call templates](codex-calls.md) first for execution permissions and continuation handling.
+Use this Codex template for older CLIs whose action `--help` does not list `--observe`. Newer CLIs provide the same sequence through the `--observe` flag and return separate `action` and `observation` responses in one JSON object. Do not add `--observe` to this fallback's action array: it would perform another capture.
+
+The fallback combines an already chosen `open`, `tap`, `swipe`, `type`, or `press` and its following observation into one orchestration call using existing commands. Read [the basic call templates](codex-calls.md) first for execution permissions and continuation handling.
 
 Copy the block intact into `functions.exec`, changing only `session` and `action` to actual values. Each array entry is one literal argument. Apply any required, already-authorized host execution options in the single `exec_command` options object, so both commands use the same context. Do not use this template for an action awaiting user authorization, or add more input actions to it.
 

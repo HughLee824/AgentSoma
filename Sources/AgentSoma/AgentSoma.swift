@@ -32,6 +32,17 @@ private func output(compact: Bool = false, _ operation: () throws -> [String: An
     if response["ok"] as? Bool != true { throw ExitCode.failure }
 }
 
+struct ActionObservationOptions: ParsableArguments {
+    @Flag(help: "Follow this action with a fresh observation. Return JSON with separate action and observation results; never replay input.") var observe = false
+}
+
+private func outputAction(session: String, observe: Bool, _ operation: () throws -> [String: Any]) throws {
+    try output {
+        let action = try operation()
+        return observe ? SessionClient.observing(session: session, action: action) : action
+    }
+}
+
 struct BuildRunner: ParsableCommand {
     static let configuration = CommandConfiguration(commandName: "build-runner", abstract: "Build and verify the signed Runner using Xcode; return its .xctestrun path.")
     @Option(help: "AgentSoma source checkout; defaults to the current directory.") var sourceRoot = "."
@@ -108,10 +119,11 @@ struct Status: ParsableCommand {
 struct Open: ParsableCommand {
     static let configuration = CommandConfiguration(abstract: "Bring an app to the foreground and renew the session.")
     @OptionGroup var options: SessionOptions
+    @OptionGroup var observation: ActionObservationOptions
     @Argument(help: "Installed app bundle identifier returned by apps.") var bundleID: String
     mutating func run() throws {
         let session = try options.requiredSession()
-        try output { try SessionClient.call(session: session, operation: "open", fields: ["bundleId": bundleID]) }
+        try outputAction(session: session, observe: observation.observe) { try SessionClient.call(session: session, operation: "open", fields: ["bundleId": bundleID]) }
     }
 }
 
@@ -176,6 +188,7 @@ struct ScreenGuardOptions: ParsableArguments {
 struct Tap: ParsableCommand {
     static let configuration = CommandConfiguration(abstract: "Tap a current element, or a point in a current observation.")
     @OptionGroup var options: SessionOptions
+    @OptionGroup var observation: ActionObservationOptions
     @OptionGroup var screenGuard: ScreenGuardOptions
     @Argument(help: "Element reference; use an observation ID with --x and --y.") var reference: String
     @Option(help: "Horizontal screen point coordinate.") var x: Double?
@@ -185,7 +198,7 @@ struct Tap: ParsableCommand {
         var fields = screenGuard.fields
         fields["reference"] = reference
         fields["x"] = x; fields["y"] = y
-        try output { try SessionClient.call(session: session, operation: "tap", fields: fields) }
+        try outputAction(session: session, observe: observation.observe) { try SessionClient.call(session: session, operation: "tap", fields: fields) }
     }
 }
 
@@ -205,6 +218,7 @@ struct Swipe: ParsableCommand {
         """)
     @OptionGroup var options: SessionOptions
     @OptionGroup var screenGuard: ScreenGuardOptions
+    @OptionGroup var observation: ActionObservationOptions
     @Argument(help: "Element reference with --direction; observation ID with explicit endpoints.") var reference: String
     @Option(help: "Finger movement across 60% of the visible element: up, down, left or right.") var direction: String?
     @Option(help: "Start horizontal screen point coordinate.") var fromX: Double?
@@ -220,13 +234,14 @@ struct Swipe: ParsableCommand {
         fields["reference"] = reference; fields["direction"] = direction
         fields["fromX"] = fromX; fields["fromY"] = fromY; fields["toX"] = toX; fields["toY"] = toY
         fields["velocity"] = velocity; fields["pressDuration"] = pressDuration; fields["holdDuration"] = holdDuration
-        try output { try SessionClient.call(session: session, operation: "swipe", fields: fields) }
+        try outputAction(session: session, observe: observation.observe) { try SessionClient.call(session: session, operation: "swipe", fields: fields) }
     }
 }
 
 struct TypeText: ParsableCommand {
     static let configuration = CommandConfiguration(commandName: "type", abstract: "Insert at the existing caret, or replace a text input's entire contents.")
     @OptionGroup var options: SessionOptions
+    @OptionGroup var observation: ActionObservationOptions
     @Argument(help: "Current text input reference.") var reference: String
     @Option(help: "insert requires existing keyboard focus; replace focuses and selects all.") var mode: String
     @Option(help: "Literal text up to 4096 UTF-8 bytes; no control keys or newlines. Empty text clears in replace mode.") var text: String?
@@ -238,11 +253,11 @@ struct TypeText: ParsableCommand {
 
     mutating func run() throws {
         let session = try options.requiredSession()
-        try output {
+        try outputAction(session: session, observe: observation.observe) {
             let value: String
             do { value = try stdin ? TextInput.read(from: .standardInput) : text! }
             catch {
-                return ["ok": false, "outcome": "not_dispatched",
+                return ["session": session, "ok": false, "outcome": "not_dispatched",
                         "error": ["code": (error as? SomaError)?.code ?? "stdin_read_failed", "message": String(describing: error)]]
             }
             return try SessionClient.call(session: session, operation: "type", fields: ["reference": reference, "mode": mode, "text": value])
@@ -253,10 +268,11 @@ struct TypeText: ParsableCommand {
 struct Press: ParsableCommand {
     static let configuration = CommandConfiguration(abstract: "Send an explicit Return to a text input with existing keyboard focus.")
     @OptionGroup var options: SessionOptions
+    @OptionGroup var observation: ActionObservationOptions
     @Argument(help: "Current text input reference; this command does not tap to focus.") var reference: String
     @Option(help: "Key to send; currently only return is supported.") var key: String
     mutating func run() throws {
         let session = try options.requiredSession()
-        try output { try SessionClient.call(session: session, operation: "press", fields: ["reference": reference, "key": key]) }
+        try outputAction(session: session, observe: observation.observe) { try SessionClient.call(session: session, operation: "press", fields: ["reference": reference, "key": key]) }
     }
 }

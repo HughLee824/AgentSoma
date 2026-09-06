@@ -143,7 +143,9 @@ agentsoma --session "$SESSION" disconnect
 
 仓库附带 [AgentSoma skill](skills/agentsoma/SKILL.md)，包含设备入口、滚轮调整策略和 [Codex 固定调用模板](skills/agentsoma/references/codex-calls.md)。将整个 `skills/agentsoma` 文件夹复制到客户端的 skill 目录（Codex 为 `$CODEX_HOME/skills`，未设置时为 `~/.codex/skills`），在新任务中加载或用 `$agentsoma` 调用；仅安装 CLI 不会注册 skill。
 
-skill 还附带可选的[动作与观察合并实验](skills/agentsoma/references/action-observation.md)：一次编排调用执行已选定的动作，再采集新观察，分别保留两份结果。它不增加 CLI 参数，不自动选择或重放输入动作。
+在 `open/tap/swipe/type/press` 后添加 `--observe`，即可返回包含独立 `action` 与 `observation` 回执的单个 JSON。两者均成功才退出 0；观察失败不会覆盖动作结果或重放输入。明确未派发且无需刷新时跳过观察。客户端顺序调用既有协议，兼容旧宿主，但不在两次请求之间独占设备。读取 `observation.result.text` 和其中的 `screenshot` 后再选择下一动作。详见[契约与示例](docs/actions.md#动作后观察)。
+
+先通过已安装命令的 `--help` 确认是否支持 `--observe`；旧 CLI 可使用 skill 中保留的[动作与观察回退模板](skills/agentsoma/references/action-observation.md)。
 
 `observe` 和 `inspect` 成功时输出多行文本；其他结果及运行时错误为单行 JSON。成功退出码为 `0`，运行失败为 `1`。参数语法错误输出到 stderr，并以非零状态退出。
 
@@ -226,7 +228,7 @@ swift test
 python3 -m unittest discover -s scripts/tests -v
 ```
 
-Python 3.9+ 仅用于发布工具及其测试，不是已安装 CLI 的运行依赖。唯一 Swift 包依赖为 [Swift ArgumentParser](https://github.com/apple/swift-argument-parser/tree/1.5.0)，锁定版本 `1.5.0`。
+Python 3.9+ 仅用于发布工具和开发测试，不是已安装 CLI 的运行依赖。按上述顺序执行：CLI 集成测试使用 Swift 构建生成的 `.build/debug/agentsoma`，缺失时会跳过。唯一 Swift 包依赖为 [Swift ArgumentParser](https://github.com/apple/swift-argument-parser/tree/1.5.0)，锁定版本 `1.5.0`。
 
 修改 Codex skill 模板时，另用 Node.js 22+ 运行 `node --test scripts/tests/test_agent_templates.mjs`。测试将文档中的 JavaScript 用于受控工具响应；Node 仅为开发测试所需，不是 CLI 或 skill 执行环境的依赖。
 

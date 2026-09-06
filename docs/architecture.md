@@ -41,6 +41,8 @@ The idle timeout defaults to 30 minutes and accepts `s`, `m`, or `h` units throu
 
 The host does not automatically replay unknown actions or restore old references after restarting. See [observations](observations.md), [actions](actions.md), and [screen guards](screen-guard.md) for detailed contracts.
 
+The CLI's optional action `--observe` composes two existing host requests and returns their responses separately. It needs no new host or Runner protocol and does not reserve the serial queue between requests. Observation failure cannot overwrite action facts, and neither operation is replayed. See the [combined response contract](actions.md#动作后观察).
+
 ## Repository layout
 
 ```text

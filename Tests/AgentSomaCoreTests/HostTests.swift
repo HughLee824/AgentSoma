@@ -19,6 +19,7 @@ private final class ControlledBackend: SessionBackend {
     var liveScreen: Data?
     var actionFailure: ActionFailure?
     var blockAction = false
+    var failObservation = false
     let actionStarted = DispatchSemaphore(value: 0)
     let releaseAction = DispatchSemaphore(value: 0)
 
@@ -43,6 +44,7 @@ private final class ControlledBackend: SessionBackend {
     }
     func observe() throws -> CapturedObservation {
         observeCount += 1
+        if failObservation { throw SomaError("capture_failed", "Fixture capture failure") }
         return try observationFixture()
     }
     func perform(_ action: DeviceAction, target: ObservedTarget) throws -> [String: Any] {
@@ -63,6 +65,49 @@ private final class ControlledBackend: SessionBackend {
 }
 
 final class HostTests: XCTestCase {
+    func testClientFollowupUsesExistingProtocolAndPreservesReferenceRules() throws {
+        let backend = ControlledBackend()
+        let (paths, session, finished) = try host(timeout: 5, backend: backend)
+        defer {
+            _ = try? call(paths, session: session, op: "disconnect")
+            wait(for: [finished], timeout: 3)
+        }
+        _ = try call(paths, session: session, op: "observe")
+        let rejected = try call(paths, session: session, op: "tap", fields: ["reference": "o1:e11", "x": 1, "y": 1])
+        _ = SessionClient.observing(session: session, action: rejected) {
+            XCTFail("Rejected arguments must preserve the observation")
+            return [:]
+        }
+        XCTAssertEqual(backend.observeCount, 1)
+        let completed = try call(paths, session: session, op: "tap", fields: ["reference": "o1:e11"])
+        let paired = SessionClient.observing(session: session, action: completed) {
+            try self.call(paths, session: session, op: "observe")
+        }
+        XCTAssertEqual(paired["ok"] as? Bool, true)
+        XCTAssertEqual(backend.actionCount, 1)
+        XCTAssertEqual(backend.observeCount, 2)
+        let old = try call(paths, session: session, op: "tap", fields: ["reference": "o1:e11"])
+        XCTAssertEqual(old["outcome"] as? String, "not_dispatched")
+        backend.actionFailure = ActionFailure(code: "lost_result", description: "Unknown", possiblyExecuted: true, requiresObservation: true)
+        let unknown = try call(paths, session: session, op: "tap", fields: ["reference": "o2:e11"])
+        backend.failObservation = true
+        let failed = SessionClient.observing(session: session, action: unknown) {
+            try self.call(paths, session: session, op: "observe")
+        }
+        XCTAssertEqual(failed["ok"] as? Bool, false)
+        XCTAssertEqual((failed["action"] as? [String: Any])?["outcome"] as? String, "unknown")
+        XCTAssertEqual(backend.actionCount, 2)
+        XCTAssertEqual(backend.observeCount, 3)
+        let stale = try call(paths, session: session, op: "tap", fields: ["reference": "o2:e11"])
+        XCTAssertEqual(stale["outcome"] as? String, "not_dispatched")
+        XCTAssertEqual(backend.actionCount, 2)
+        backend.actionFailure = nil
+        backend.failObservation = false
+        _ = try call(paths, session: session, op: "observe")
+        let recovery = try call(paths, session: session, op: "tap", fields: ["reference": "o3:e11"])
+        XCTAssertEqual(recovery["outcome"] as? String, "completed")
+    }
+
     private func host(timeout: Double, backend: ControlledBackend) throws -> (SessionPaths, String, XCTestExpectation) {
         let directory = URL(fileURLWithPath: "/private/tmp/as-test-\(UUID().uuidString.prefix(8))")
         try SessionPaths.secureDirectory(directory)

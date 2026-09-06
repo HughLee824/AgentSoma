@@ -3,6 +3,31 @@ import Network
 import Darwin
 
 public enum SessionClient {
+    /// Compose existing host operations without replaying input or requiring a newer host protocol.
+    public static func observing(session: String, action: [String: Any]) -> [String: Any] {
+        observing(session: session, action: action) {
+            try call(session: session, operation: "observe")
+        }
+    }
+
+    static func observing(session: String, action: [String: Any], capture: () throws -> [String: Any]) -> [String: Any] {
+        let rejected = action["session"] as? String == session && action["ok"] as? Bool == false
+            && action["outcome"] as? String == "not_dispatched"
+            && (action["requiresObservation"] == nil || action["requiresObservation"] as? Bool == false)
+        if rejected {
+            return ["session": session, "ok": false, "action": action,
+                    "observation": ["skipped": "not_dispatched"]]
+        }
+        let observation: [String: Any]
+        do { observation = try capture() }
+        catch {
+            observation = ["session": session, "ok": false,
+                "error": ["code": (error as? SomaError)?.code ?? "observation_failed", "message": String(describing: error)]]
+        }
+        return ["session": session, "ok": action["ok"] as? Bool == true && observation["ok"] as? Bool == true,
+                "action": action, "observation": observation]
+    }
+
     public static func connect(device: String, xctestrun: URL, idleTimeout: IdleTimeout) throws -> [String: Any] {
         guard FileManager.default.isReadableFile(atPath: xctestrun.path), xctestrun.pathExtension == "xctestrun" else {
             throw SomaError("runner_not_built", "Run build-runner, then provide its readable .xctestrun path using --xctestrun")

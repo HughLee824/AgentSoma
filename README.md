@@ -143,7 +143,9 @@ Coordinates use **screen points**, not screenshot pixels. Swipe direction descri
 
 The repository includes an [AgentSoma skill](skills/agentsoma/SKILL.md) with device routing, wheel-adjustment guidance, and [fixed Codex call templates](skills/agentsoma/references/codex-calls.md). Copy the entire `skills/agentsoma` folder into your client's skill directory (for Codex, `$CODEX_HOME/skills` or `~/.codex/skills`). Load it in a new task or invoke `$agentsoma`; installing the CLI alone does not register the skill.
 
-The skill also includes an optional [action-and-observation experiment](skills/agentsoma/references/action-observation.md): one orchestration call executes a selected action and then captures a new observation, preserving both results. It adds no CLI option and does not choose or replay input actions.
+Add `--observe` to `open`, `tap`, `swipe`, `type`, or `press` to return one JSON object containing separate `action` and `observation` responses. Exit code zero requires both to succeed; an observation failure never overwrites the action's outcome or replays input. A confirmed rejection without a refresh requirement skips observation. This client-side sequence uses the existing host protocol, including older hosts; it does not reserve the device between requests. Read `observation.result.text` and its `screenshot` before choosing the next input. See [the contract and examples](docs/actions.md#动作后观察).
+
+Check the installed command's `--help` for `--observe` support. For older CLIs, the skill retains the [action-and-observation fallback template](skills/agentsoma/references/action-observation.md).
 
 Successful `observe` and `inspect` commands print multiline text. Other results and runtime errors use single-line JSON. Success exits with `0`; runtime failure exits with `1`. Argument syntax errors are reported on stderr with a nonzero exit code.
 
@@ -226,7 +228,7 @@ swift test
 python3 -m unittest discover -s scripts/tests -v
 ```
 
-Python 3.9+ is used for release tooling and its tests, not the installed CLI runtime. The only Swift package dependency is [Swift ArgumentParser](https://github.com/apple/swift-argument-parser/tree/1.5.0), pinned to `1.5.0`.
+Python 3.9+ is used for release tooling and development tests, not the installed CLI runtime. Run the commands in the order shown: CLI integration tests use `.build/debug/agentsoma` from the Swift build and are skipped when it is absent. The only Swift package dependency is [Swift ArgumentParser](https://github.com/apple/swift-argument-parser/tree/1.5.0), pinned to `1.5.0`.
 
 When changing the Codex skill templates, also run `node --test scripts/tests/test_agent_templates.mjs` with Node.js 22+. These tests execute the documented JavaScript against controlled tool responses; Node is only needed for development tests, not the CLI or the skill's execution environment.
 

@@ -29,7 +29,7 @@ There are separate identities: the AgentSoma device session, the execution tool'
 
 `inspect` can read an invalidated cached observation, but cannot revive its references. An action screenshot contains no new AX references. A nonzero shell exit or lost transport response alone does not prove an input was never sent.
 
-For an already authorized, selected action in Codex, the optional [action-and-observation experiment](references/action-observation.md) performs that one action and its follow-up observation in one orchestration call. Read the template before using it. It preserves the two results separately, handles pending commands, and never chooses or replays an input. A successful returned observation replaces the separate `observe` step; read its screenshot and verify the result before choosing the next action.
+For an already authorized, selected action, use `--observe` when the installed command's `--help` lists it. Read `action.outcome` separately from `observation.ok`; top-level `ok` is true only when both succeed. A successful `observation.result` supplies fresh references, `text`, and `screenshot`, replacing a separate `observe`; read that PNG and verify the result before another input. If observation fails, retain the action facts and recover with observation, never by replaying input. This is a client-side sequence compatible with older hosts, not an exclusive device transaction. For older CLIs, read the [fallback template](references/action-observation.md); do not add `--observe` to that template's action array, which would duplicate capture.
 
 ## Adjust wheels from observed values
 

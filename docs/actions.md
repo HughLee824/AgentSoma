@@ -27,6 +27,32 @@ agentsoma --session "$SESSION" tap o13:e10 --protect o13:e20
 - `--text` 与 `--stdin` 必须且只能选一个。stdin 读取到 EOF，严格解码 UTF-8，不裁剪首尾空格、不去掉末尾换行、不解释转义或执行文本。可用文件重定向或管道；管道生产者需关闭输出。读取到第 4097 字节就拒绝，不为超长输入继续等待 EOF。`--mode replace --stdin < /dev/null` 表示清空。
 - `press oN:eN --key return` 向当前输入框发送独立 Return，要求已有键盘焦点，不额外 tap。需要聚焦时先 tap、再 observe。当前只接受小写 `return`，未提供其他按键或组合键接口。具体界面效果由 App 决定，可能提交、换行或无业务变化；调用方仍需 observe 核对。
 
+## 动作后观察
+
+`open/tap/swipe/type/press` 均接受可选 `--observe`，例如：
+
+```sh
+agentsoma --session "$SESSION" open com.example.app --observe
+agentsoma --session "$SESSION" tap o1:e10 --observe
+agentsoma --session "$SESSION" type o2:e8 --mode replace --text '新内容' --observe
+```
+
+每条命令只执行一个已选择的动作，再根据回执调用一次既有 `observe`。返回单行 JSON：
+
+```json
+{"session":"example-session","ok":true,"action":{"id":"action-request","session":"example-session","ok":true,"outcome":"completed","result":{}},"observation":{"id":"capture-request","session":"example-session","ok":true,"result":{"observation":"o2","refs":"current","screenshot":"/example/o2/screen.png","text":"observation=o2 refs=current…"}}}
+```
+
+- `action` 完整保留原动作回执，包括 `outcome`、错误及可用输入事实；`observation` 独立保留观察回执。CLI 退出码与顶层 `ok` 表示整组是否成功：动作和观察均成功才为 0 / true。
+- `completed`、`unknown` 和需要刷新的拒绝均继续观察。`unknown` 即使观察成功也仍退出 1；观察不能追认动作完成。
+- 会话匹配、`ok=false`、`outcome=not_dispatched` 且 `requiresObservation` 缺省或为 false 时，不刷新，返回 `observation={"skipped":"not_dispatched"}`。这保留了可纠正参数错误后的当前引用。
+- 观察失败时，顶层 `ok=false`，原动作回执不变。依据观察错误恢复，再单独 `observe`；不能重放动作。只有成功的新观察提供新引用，动作自带截图没有 AX 引用。
+- 不带 `--observe` 的正常输出保持原形状。语法或会话参数错误仍可在请求前失败；后台执行句柄必须续接到命令结束。若整个 CLI 的响应丢失，输入可能已经发生，应先观察，不能重跑原命令。
+
+这个选项由当前 CLI 顺序调用两次既有宿主协议实现，无需宿主能力协商或 Runner 升级，也不会向旧宿主发送可被忽略的新动作字段。它不将动作与观察变成原子事务：其他已接纳请求、App 自发变化或会话关闭可能发生在两步之间。后续其他客户端也可使返回的新引用失效，原有校验仍生效。
+
+已安装的旧 CLI 不支持新参数；先检查动作 `--help`，必要时使用分开的动作/观察或 skill 回退模板。不要把带 `--observe` 的动作再放入动作加观察的模板中，避免重复采集。
+
 ## 可控拖动
 
 `swipe` 的起终点规定手指轨迹，不承诺内容滚动多少点或选中多少格。以下参数控制拖动过程，默认值保留此前实测的 500 / 0 / 0 行为：
@@ -86,7 +112,7 @@ Runner 没有跨请求观察缓存、短引用、续期计时或任务策略。�
 
 ## 执行结果
 
-进入会话的动作结果均为单行 JSON，并保留请求 ID 和 session。stdin 的读取、编码或字节上限错误在 CLI 创建请求前返回 `ok=false`、`outcome=not_dispatched` 和 error，此时没有会话请求关联字段。文本源选择等语法错误继续由 ArgumentParser 输出到 stderr 并非零退出。
+进入会话的动作结果均为单行 JSON，并保留请求 ID 和 session。stdin 的读取、编码或字节上限错误在 CLI 创建请求前返回 `session`、`ok=false`、`outcome=not_dispatched` 和 error，此时没有请求 ID；带 `--observe` 时同样跳过采集。文本源选择等语法错误继续由 ArgumentParser 输出到 stderr 并非零退出。
 
 ```json
 {"id":"example-request","session":"example-session","ok":true,"outcome":"completed","result":{"kind":"tap","execution":{"started":true,"inputCompleted":true,"completed":true},"screenGuard":{"algorithm":"srgb-grid-v1","accepted":true,"screenChange":0,"regionChanges":[0],"maxScreenChange":0.01,"maxRegionChange":0,"pixelTolerance":8},"stability":{"stable":true,"samples":4,"consecutiveFrames":4,"stableForMs":563,"elapsedMs":750,"hash":"example-sha256","algorithm":"sha256-rgba8-srgb","sampleIntervalMs":200,"requiredStableMs":400,"timeoutMs":5000},"frame":{"screenshot":"/private/tmp/agentsoma-501/example-session/observations/action/screen.png","hash":"example-sha256","capturedAt":1788608247.676,"width":1170,"height":2532},"runnerMs":3634}}
