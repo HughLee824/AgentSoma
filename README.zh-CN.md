@@ -141,6 +141,8 @@ agentsoma --session "$SESSION" disconnect
 
 ## Agent 接入约定
 
+仓库附带 [AgentSoma skill](skills/agentsoma/SKILL.md)，包含设备入口、滚轮调整策略和 [Codex 固定调用模板](skills/agentsoma/references/codex-calls.md)。将整个 `skills/agentsoma` 文件夹复制到客户端的 skill 目录（Codex 为 `$CODEX_HOME/skills`，未设置时为 `~/.codex/skills`），在新任务中加载或用 `$agentsoma` 调用；仅安装 CLI 不会注册 skill。
+
 `observe` 和 `inspect` 成功时输出多行文本；其他结果及运行时错误为单行 JSON。成功退出码为 `0`，运行失败为 `1`。参数语法错误输出到 stderr，并以非零状态退出。
 
 调用 `open`、`tap`、`swipe`、`type` 和 `press` 时，除退出码外还要检查动作结果：
@@ -159,6 +161,7 @@ agentsoma --session "$SESSION" disconnect
 - **搜索已有快照。** `inspect --query` 先搜索全部已采集节点，再分页输出。它不会补采缺失数据，也不会恢复旧引用的有效性。
 - **实际读取图片。** stdout 中的路径不会自动成为视觉输入，agent 必须通过自己的读图工具打开 PNG。
 - **跟踪命令完成状态。** 如果命令工具返回后台任务 ID，须使用该工具的续读机制获取原命令的退出码和输出。这个 ID 与 AgentSoma 的设备 `session` 不同。
+- **保留守卫默认值。** 画面变化阈值比较输入前画面与观察时画面，预计的滚动或动画幅度不是放宽理由。
 - **结束后释放会话。** 默认空闲时限为 30 分钟，`status` 不续期，已接收或执行中的命令不会被空闲回收打断。断开或到期后删除 socket 和观察缓存。
 
 详细行为见[观察契约](docs/observations.md)、[动作契约](docs/actions.md)和[动作前画面校验](docs/screen-guard.md)。

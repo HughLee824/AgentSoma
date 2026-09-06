@@ -126,6 +126,38 @@ final class HostTests: XCTestCase {
         wait(for: [finished], timeout: 3)
     }
 
+    func testCoordinateReferenceConflictCanBeCorrectedWithoutRecapturing() throws {
+        let backend = ControlledBackend()
+        let (paths, session, finished) = try host(timeout: 5, backend: backend)
+        for (index, operation) in ["tap", "swipe"].enumerated() {
+            _ = try call(paths, session: session, op: "observe")
+            let observation = "o\(index + 1)"
+            let reference = "\(observation):e1"
+            var fields: [String: Any] = operation == "tap" ? ["x": 100, "y": 600]
+                : ["fromX": 100, "fromY": 600, "toX": 100, "toY": 550]
+            fields["reference"] = reference
+            let rejected = try call(paths, session: session, op: operation, fields: fields)
+            XCTAssertEqual(rejected["outcome"] as? String, "not_dispatched")
+            let error = try XCTUnwrap(rejected["error"] as? [String: Any])
+            XCTAssertEqual(error["code"] as? String, "invalid_coordinates")
+            let message = try XCTUnwrap(error["message"] as? String)
+            XCTAssertTrue(message.contains("Element reference \(reference)"))
+            XCTAssertTrue(message.contains("Use \(operation) \(observation) "))
+            XCTAssertTrue(message.contains("--protect \(reference)"))
+            XCTAssertEqual(backend.actionCount, index)
+            XCTAssertEqual(backend.inputCount, index)
+
+            fields["reference"] = observation
+            fields["protect"] = [reference]
+            let corrected = try call(paths, session: session, op: operation, fields: fields)
+            XCTAssertEqual(corrected["outcome"] as? String, "completed")
+            XCTAssertEqual(backend.inputCount, index + 1)
+            XCTAssertEqual(backend.observeCount, index + 1)
+        }
+        _ = try call(paths, session: session, op: "disconnect")
+        wait(for: [finished], timeout: 3)
+    }
+
     func testHealthTrafficCannotPreventIdleCleanup() throws {
         let backend = ControlledBackend()
         let (paths, session, finished) = try host(timeout: 0.4, backend: backend)

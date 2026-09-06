@@ -61,6 +61,7 @@ AgentSoma/
 │   ├── examples/observe/            # Curated CLI output example
 │   └── *.md                        # Public guides and architecture
 ├── scripts/                         # Release tooling and its tests
+├── skills/agentsoma/                # Installable agent instructions and call templates
 ├── packaging/homebrew-tap/          # Tap setup and update workflow
 ├── README.md                        # Default English entry point
 ├── README.zh-CN.md                  # Chinese entry point

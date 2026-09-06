@@ -141,6 +141,8 @@ Coordinates use **screen points**, not screenshot pixels. Swipe direction descri
 
 ## Agent integration
 
+The repository includes an [AgentSoma skill](skills/agentsoma/SKILL.md) with device routing, wheel-adjustment guidance, and [fixed Codex call templates](skills/agentsoma/references/codex-calls.md). Copy the entire `skills/agentsoma` folder into your client's skill directory (for Codex, `$CODEX_HOME/skills` or `~/.codex/skills`). Load it in a new task or invoke `$agentsoma`; installing the CLI alone does not register the skill.
+
 Successful `observe` and `inspect` commands print multiline text. Other results and runtime errors use single-line JSON. Success exits with `0`; runtime failure exits with `1`. Argument syntax errors are reported on stderr with a nonzero exit code.
 
 For `open`, `tap`, `swipe`, `type`, and `press`, read the action outcome as well as the exit code:
@@ -159,6 +161,7 @@ Keep these rules in the calling agent's workflow:
 - **Search the snapshot you have.** `inspect --query` searches all captured nodes before pagination. It neither captures missing source data nor makes stale references current.
 - **Read the image.** A path in stdout is not visual input. The agent must open the PNG with its own image-reading tool.
 - **Track command completion.** If the execution tool returns a background job ID, use its continuation mechanism to collect the original command's exit code and output. That ID is separate from AgentSoma's device `session`.
+- **Keep guard defaults.** Screen-change limits apply before input, relative to the observation. Expected scrolling or animation size is not a reason to raise them.
 - **Close the session.** The default idle timeout is 30 minutes. `status` does not renew it, and accepted or running commands are not interrupted by idle expiry. Disconnecting or expiring removes the socket and observation cache.
 
 Details: [observations](docs/observations.md), [actions](docs/actions.md), and [screen guard](docs/screen-guard.md).

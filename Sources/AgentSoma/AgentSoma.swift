@@ -166,7 +166,7 @@ struct Host: ParsableCommand {
 }
 
 struct ScreenGuardOptions: ParsableArguments {
-    @Option(help: "Maximum changed screen-grid fraction (0...1); default 0.01. Not a confidence score.") var maxScreenChange = 0.01
+    @Option(help: "Maximum screen-grid change BEFORE input, relative to the observation (0...1); default 0.01. Not the expected scroll or animation size.") var maxScreenChange = 0.01
     @Option(help: "Maximum changed protected-region fraction (0...max-screen-change); default 0.") var maxRegionChange = 0.0
     @Option(help: "Additional element reference to protect, repeat up to three times; same observation as the action.") var protect: [String] = []
 
@@ -192,11 +192,21 @@ struct Tap: ParsableCommand {
 struct Swipe: ParsableCommand {
     static let configuration = CommandConfiguration(
         abstract: "Swipe or drag with explicit speed and holds after a screen guard.",
-        discussion: "For wheel adjustments, use observed endpoints, a slower --velocity (for example 100), and --hold-duration 0.2 before lifting. For drag-and-drop, add --press-duration (for example 0.5). These are starting values, not a one-row guarantee. Observe after every dispatched action, including no change, and verify the selected value; completed means input finished and the screen stabilized. Estimated motion is limited to 10 seconds.")
+        discussion: """
+        With --direction, the finger moves across 60% of the element's visible height or width; this can cross several wheel rows. Slower velocity does not shorten the distance.
+
+        For wheel adjustments near the target, inspect the current value and row spacing, then use an observation ID with explicit endpoints. For example, if the observed rows are about 48 screen points apart:
+          agentsoma --session SESSION swipe oN --from-x 228 --from-y 385 --to-x 228 --to-y 337 --velocity 100 --hold-duration 0.2
+        Replace the session, observation, and coordinates with current observed values. Optionally add --protect oN:eN; do not combine an element reference as the target with endpoints.
+
+        The speed and hold values are starting points, not a one-row guarantee. After every dispatched action, including no change, observe and verify the actual selected value. Repeated no-change or overshoot calls for checking the field and geometry before another attempt. completed means input finished and the screen stabilized.
+
+        For drag-and-drop, add --press-duration (for example 0.5). Estimated motion is limited to 10 seconds. Keep screen-guard defaults unless a concrete pre-input screen change warrants a different policy.
+        """)
     @OptionGroup var options: SessionOptions
     @OptionGroup var screenGuard: ScreenGuardOptions
     @Argument(help: "Element reference with --direction; observation ID with explicit endpoints.") var reference: String
-    @Option(help: "Finger movement within the element: up, down, left or right.") var direction: String?
+    @Option(help: "Finger movement across 60% of the visible element: up, down, left or right.") var direction: String?
     @Option(help: "Start horizontal screen point coordinate.") var fromX: Double?
     @Option(help: "Start vertical screen point coordinate.") var fromY: Double?
     @Option(help: "End horizontal screen point coordinate.") var toX: Double?

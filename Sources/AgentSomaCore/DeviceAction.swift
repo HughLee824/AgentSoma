@@ -20,7 +20,12 @@ struct DeviceAction {
         var fields: [String: Any] = ["kind": operation]
         if coordinate {
             let required = operation == "tap" ? ["x", "y"] : (operation == "swipe" ? ["fromX", "fromY", "toX", "toY"] : [])
-            guard !required.isEmpty, reference.node == nil,
+            if !required.isEmpty, let node = reference.node {
+                let element = "\(reference.observation):e\(node + 1)"
+                let coordinates = operation == "tap" ? "--x X --y Y" : "--from-x X --from-y Y --to-x X --to-y Y"
+                throw SomaError("invalid_coordinates", "Element reference \(element) cannot be combined with coordinates. Use \(operation) \(reference.observation) \(coordinates); optionally add --protect \(element) to protect the captured element")
+            }
+            guard !required.isEmpty,
                   coordinateKeys.filter({ request[$0] != nil }).count == required.count else {
                 throw SomaError("invalid_coordinates", "Use tap oN --x --y, or swipe oN --from-x --from-y --to-x --to-y")
             }
