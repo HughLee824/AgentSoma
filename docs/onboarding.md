@@ -1,8 +1,52 @@
-# Runner 构建与首次接入
+# 首次接入
 
-v0.1 使用本机 Mac/Xcode 和用户自己的开发签名。外部 agent 执行构建、连接及设备命令；登录 Apple 账号、首次信任和系统确认由用户完成。
+发布包携带预编译 CLI 与 Runner。用户在本机 Mac/Xcode 环境中使用自己的开发签名重签 Runner；外部 agent 执行 setup、连接及设备命令。登录 Apple 账号、首次信任和系统确认由用户完成。当前只生成本地候选包，公共下载渠道尚未配置。
 
-## 准备一次签名环境
+## 发布包 setup
+
+1. 解压完整发布目录，将 `bin` 加入 PATH，保留相邻的 `libexec/agentsoma/runner`。可以移动整个目录或为 CLI 创建软链接；不要只复制单个二进制。
+2. 使用完整 Xcode；`xcode-select -p` 应指向它的 `Contents/Developer`。在 Xcode Settings → Accounts 登录开发账号，确保 Keychain 中有可用的 Apple Development 证书和对应私钥。
+3. 用 USB 连接 iPhone，完成信任确认并启用 Developer Mode，保持解锁。准备包含该设备、开发证书和目标 bundle ID 的 iOS development profile。已有 Xcode profile 可自动发现；付费开发团队也可按 Apple 的[开发 profile 流程](https://developer.apple.com/help/account/provisioning-profiles/create-a-development-provisioning-profile)创建并下载，再传 `--profile`。setup 不创建 Apple 资源，也不通过编译 Runner 来生成 profile。
+
+```sh
+agentsoma --version
+agentsoma devices
+agentsoma setup --device "$IOS_UDID"
+# 无匹配 profile 或存在歧义时，按实际签名条件明确选择：
+agentsoma setup --device "$IOS_UDID" --profile "$DEVELOPMENT_PROFILE" --team "$APPLE_TEAM_ID"
+```
+
+默认手机 App bundle ID 为 `com.agentsoma.runner.xctrunner`。若 profile 只授权自己的标识，首次 setup 添加 `--bundle-id com.example.agentsoma.xctrunner`；这里传的是 **App 的完整 bundle ID**，之后会保存复用。存在多个匹配开发证书时，用 `--identity` 传 `security find-identity -v -p codesigning` 中的证书 SHA-1。该标识用于本机选取私钥，不是私钥内容。
+
+setup 依次校验发布文件和 CLI 配对、设备版本、profile 的设备/bundle ID/有效期/证书匹配，复制并重签 Runner，通过 `test-without-building` 在设备安装启动，然后验证握手、截图和正常退出。只有全部成功才更新该设备的准备记录。`compiled:false` 表示这条用户路径没有编译；`verified` 的截图项不代表已验证某个业务 App 的 AX 树或交互效果。
+
+之后从任意工作目录连接，无需 `.xctestrun`：
+
+```sh
+agentsoma connect --device "$IOS_UDID"
+# 使用真实返回的 session。
+agentsoma --session "$SESSION" open com.apple.Preferences
+agentsoma --session "$SESSION" observe
+agentsoma --session "$SESSION" disconnect
+```
+
+设备准备记录和重签产物位于 `~/Library/Application Support/AgentSoma`，与发布包、源码和临时会话目录分开。记录按 CoreDevice 返回的规范 UDID 关联，保存 bundle ID、签名选择、profile 到期时间和文件摘要。产物中包含用户自己的 profile，根目录权限为 0700、记录权限为 0600；不要将此目录放进公开 issue 或发布包。私钥留在 Keychain 中。
+
+## 升级与续签
+
+- **重复 setup**：检查已保存及 Xcode 缓存中的有效 profile，选择同一签名配置下最新的有效版本；已有产物仍匹配时直接复用，并重新做设备验证。
+- **发布包升级**：安装完整新目录，先断开旧会话再切换 CLI。Runner 内容改变时执行 setup；完全相同的 Runner 内容不会仅因 CLI 版本号变化而要求重签。旧目录不会被覆盖，避免破坏仍被宿主持有的文件。
+- **profile 到期或证书轮换**：在 Xcode/开发团队中更新签名资料后重新 setup，必要时传新的 `--profile`。默认沿用设备记录中的 bundle ID，不因重新签名产生另一个 Runner App。
+- **手机卸载了 Runner**：只要本机产物仍有效，connect 的 `test-without-building` 会重新安装；也可重跑 setup 做完整验证。
+- **旧产物清理**：当前保留重签产物及诊断目录。确认没有活跃会话引用后再清理旧目录；清理文件本身不会断开会话。
+
+免费 Personal Team 的首次 provisioning 和到期续签尚未验收。Apple 对免费账号规定的 profile 有效期为七天，见[账号能力说明](https://developer.apple.com/help/account/basics/about-your-developer-account)；当前付费团队的成功结果不代表免费账号路径已成立。
+
+## 源码开发入口
+
+以下仅用于修改 Runner 的维护者和贡献者，不是发布包用户 setup 的前置步骤。
+
+### 准备一次签名环境
 
 1. 使用完整 Xcode；`xcode-select -p` 应指向该 Xcode 的 `Contents/Developer`。如果选择了独立 Command Line Tools，可在 Xcode 的 Settings → Locations 中选择工具链。
 2. 在 Xcode 登录自己的 Apple 开发账号，打开 `Runner/AgentSomaRunner.xcodeproj`。选择 `AgentSomaTests` target，在 Signing & Capabilities 中选择团队、启用自动签名，并设置该团队可使用的 bundle ID。默认 `com.agentsoma.runner` 是工程默认值，可按账号需要更改。
@@ -10,7 +54,7 @@ v0.1 使用本机 Mac/Xcode 和用户自己的开发签名。外部 agent 执行
 
 CLI 不管理 Apple 账号、证书或 profile，不传入 `-allowProvisioningUpdates`。团队和 bundle ID 可以保存在本机 Xcode 工程设置中，也可由 agent 在构建时用 `--team`、`--bundle-id` 覆盖。命令行覆盖不会写回 Xcode 工程。
 
-## 由 agent 构建并连接
+### 构建并连接
 
 在 AgentSoma 源码目录执行：
 
@@ -48,11 +92,18 @@ swift build
 
 | 返回结果 | 下一步 |
 | --- | --- |
+| `runner_package_missing` / `runner_package_mismatch` / `runner_package_invalid` | 安装完整、同一版本的 CLI 与 Runner 发布包，保留目录结构。不要搜索 `.build` 选择旧产物。 |
+| `setup_required` / `setup_update_required` / `setup_state_invalid` | 对该设备重新 setup；如旧会话仍活跃先断开。 |
+| `xcode_unavailable` / `ios_version_unsupported` | 选择完整 Xcode；设备需达到当前 Runner 包的最低版本。最低版本只用于排除已知不兼容，不代表所有组合都经过验收。 |
+| `profile_not_found` / `profile_invalid` | 准备匹配的 iOS development profile，必要时传 `--profile`。发布用户不需要 build-runner。 |
+| `profile_expired` / `profile_device_mismatch` / `profile_bundle_mismatch` / `profile_identity_mismatch` / `profile_team_mismatch` | 按错误修正 profile 或选择参数，然后重新 setup。 |
+| `signing_identity_unavailable` / `signing_identity_ambiguous` | 检查当前执行上下文是否能访问 Keychain 中的开发私钥；明确选择匹配证书。沙盒内看不到证书不等于本机不存在证书。 |
+| `runner_signing_failed` / `setup_verification_failed` / `setup_cleanup_failed` | 阅读错误和会话日志；签名成功不等于设备可用，验证失败不会保存准备记录。 |
 | `runner_source_missing` | 将 `--source-root` 指向包含 `Runner/AgentSomaRunner.xcodeproj` 的源码目录。复制单个 CLI 二进制不会携带 iOS 源码。 |
 | `invalid_team` / `invalid_bundle_id` | 修正签名参数；team 是 10 位开发团队 ID，bundle ID 是点分隔标识。 |
 | `runner_build_failed` | 阅读返回路径中的 `build.log`。若提示缺少开发团队/profile，在 Xcode 完成签名；若选中的是 Command Line Tools，切换到完整 Xcode。构建错误不一概归因于签名。 |
 | `runner_products_invalid` / `runner_signature_invalid` | 检查当前源码、构建日志和产物；重新构建，使用新的输出路径。 |
-| `runner_needs_rebuild` | 当前 CLI 要求支持可控拖动的 `actionVersion=5`。重新 build-runner，将新的 xctestrun 路径用于 connect；旧的成功构建不自动更新。 |
+| `runner_needs_rebuild` | 错误列出预期与实际能力版本。发布用户安装配套版本并 setup；源码开发者重新 build-runner，使用新路径 connect。 |
 | `coredevice_initialization_timeout` | 若在沙盒内，先通过调用工具的授权机制，在允许 CoreDevice 通信的本机环境中对照一次只读 devices，再定位原因；不单凭超时断定服务损坏。见[接入诊断](discovery.md#接入失败诊断)。 |
 | `coredevice_access_denied` | 原始命令输出明确拒绝访问。检查本机执行权限，再做一次只读 devices 对照。 |
 | `coredevice_failed` | 读取错误中的失败阶段、退出码和原始信息；未知错误不自动归因于权限。 |
@@ -64,7 +115,7 @@ swift build
 
 `Runner/LiveSessionTests.swift` 是原有会话 Runner 的同一实现；独立原生 Xcode 工程只编译该文件，没有 Fixture 依赖或额外固定测试。测试模块仍叫 `AgentSomaTests`，以保持现有宿主选择器兼容。旧探针的 `project.yml` 引用同一源码；重建探针前重新运行 XcodeGen。正式 Runner 构建不需要它。
 
-这完成的是已有 Mac/Xcode 签名条件下的源码接入。免 Xcode 安装、全新 Mac 配置、免费 Personal Team 签名以及更多 OS/设备组合仍未验证；iOS 16 和 macOS 13 的编译部署下限不是完整链路的支持承诺。
+免 Xcode 安装、全新 Mac 配置、免费 Personal Team 签名以及更多 OS/设备组合仍未验证。发布 Runner 的编译下限为 iOS 17，源码工程默认仍为 iOS 16；macOS CLI 编译下限为 13。这些编译下限不是完整链路的支持承诺。发布包验收见 [Release 与 setup](release-setup.md)。
 
 ## 2026-09-05 验收
 

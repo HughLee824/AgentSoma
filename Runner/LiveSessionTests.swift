@@ -134,7 +134,7 @@ final class LiveSessionTests: XCTestCase {
     @MainActor
     func testCommandSession() async throws {
         guard let token = ProcessInfo.processInfo.environment["AGENTSOMA_SESSION_TOKEN"], token.count >= 32 else {
-            throw XCTSkip("Start through agentsoma connect to enable the command session")
+            throw XCTSkip("Start through agentsoma connect to enable the command session", file: #fileID)
         }
         continueAfterFailure = true
         let server = try CommandServer()
@@ -198,7 +198,7 @@ final class LiveSessionTests: XCTestCase {
             print("AGENTSOMA_COMMAND id=\(command["id"] ?? "missing") sequence=\(sequence) op=\(command["op"] ?? "missing") ok=\(response["ok"] ?? false) runnerMs=\(response["runnerMs"] ?? 0) beganUptime=\(began) repliedUptime=\(ProcessInfo.processInfo.systemUptime)")
             if stopping { didShutdown = true; break }
         }
-        XCTAssertTrue(didShutdown, "Session ended without an explicit shutdown command")
+        XCTAssertTrue(didShutdown, "Session ended without an explicit shutdown command", file: #fileID)
     }
 
     @MainActor

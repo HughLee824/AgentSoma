@@ -2,50 +2,44 @@
 
 AgentSoma 为外部 agent 提供操作真实 iPhone 的眼睛和手。自然语言理解、任务规划和结果判断由调用 agent 负责。
 
-当前已进入 Swift CLI 与会话宿主实现阶段。调用链为：
+发布形态为预编译 macOS CLI 和配套 iOS Runner，用户在本机重签部署。调用链为：
 
 ```text
 agent → agentsoma CLI → 按会话运行的 Swift 宿主 → CoreDevice IPv6 → 薄 XCTest Runner
 ```
 
-## 构建与使用
+## 安装与使用
 
 当前开发环境为 macOS 15.0.1、Xcode 16.0 / Swift 6.0，真机为 iOS 26.6。Swift 包的 macOS 13 部署目标是编译下限，尚不代表完整设备链路在 macOS 13 上经过验证。
 
-```sh
-swift build
-swift test
-.build/debug/agentsoma --help
-```
+当前可生成本地发布候选包，尚未发布公共下载版本。安装时解压完整目录，将其中 `bin` 加入 PATH；保留相邻的 `libexec`，也可为 `bin/agentsoma` 创建软链接。用户运行不需要源码仓库、Swift Package Manager、Python、Node、iproxy 或 pymobiledevice3。打包步骤和发布边界见 [Release 与 setup](docs/release-setup.md)。
 
-唯一源码库依赖是锁定为 1.5.0 的 [Swift ArgumentParser](https://github.com/apple/swift-argument-parser/tree/1.5.0)，可由当前工具链编译；没有 iproxy、pymobiledevice3、Python 或 Node 运行依赖。
-
-Runner 使用仓库内的[独立 Xcode 工程](Runner/AgentSomaRunner.xcodeproj/project.pbxproj)，只构建会话测试，不带 Fixture 或固定探针测试，也不需要 XcodeGen。首次使用需在 Xcode 配置自己的开发团队和签名，并让设备信任 Mac、启用 Developer Mode。具体步骤与错误处理见[首次接入](docs/onboarding.md)。以下命令由外部 agent 执行；用户不需要手动操作截图、点击或输入命令。
+首次使用仍需完整 Xcode、可用的 Apple Development 私钥及匹配 iPhone 的 development profile，并让设备信任 Mac、启用 Developer Mode。`setup` 只重签预编译 Runner，不编译源码，也不登录 Apple 账号。具体步骤与签名准备见[首次接入](docs/onboarding.md)。以下命令由外部 agent 执行：
 
 ```sh
-.build/debug/agentsoma build-runner --team "$APPLE_TEAM_ID"
-# 将结果中的 xctestrun 完整路径用于下面的 SIGNED_XCTESTRUN。
-.build/debug/agentsoma devices
-.build/debug/agentsoma connect \
-  --device "$IOS_UDID" \
-  --xctestrun "$SIGNED_XCTESTRUN"
+agentsoma --version
+agentsoma devices
+agentsoma setup --device "$IOS_UDID"
+agentsoma connect --device "$IOS_UDID"
 
 # 使用 connect 实际返回的 session。
-.build/debug/agentsoma --session "$SESSION" status
-.build/debug/agentsoma --session "$SESSION" apps --query Settings
-.build/debug/agentsoma --session "$SESSION" open com.apple.Preferences
-.build/debug/agentsoma --session "$SESSION" observe
+agentsoma --session "$SESSION" status
+agentsoma --session "$SESSION" apps --query Settings
+agentsoma --session "$SESSION" open com.apple.Preferences
+agentsoma --session "$SESSION" observe
 # agent 读取返回的 PNG；使用实际返回的观察 / 元素引用。
-.build/debug/agentsoma --session "$SESSION" inspect o1:e9
+agentsoma --session "$SESSION" inspect o1:e9
 # 每次动作使用最新观察中实际取得的引用，完成后再次 observe。
-.build/debug/agentsoma --session "$SESSION" tap o1:e9
-.build/debug/agentsoma --session "$SESSION" observe
-.build/debug/agentsoma --session "$SESSION" disconnect
+agentsoma --session "$SESSION" tap o1:e9
+agentsoma --session "$SESSION" observe
+agentsoma --session "$SESSION" disconnect
 ```
 
-`build-runner` 使用当前选中的 Xcode 构建并验证签名，返回实际 SDK 对应的 `.xctestrun` 路径。每次构建使用独立目录，已有构建可供后续会话复用。`connect` 通过 Xcode 安装并启动该 Runner，在宿主和 Runner 均可响应后返回，agent 不需要单独启动后台服务。每条 CLI 命令结束后，宿主继续持有原 XCTest 会话。会话结束后，宿主释放自己的 xcodebuild/Runner 资源并退出。
+`setup` 自动选择匹配设备、bundle ID 和可见开发证书的 profile；有歧义时用 `--team`、`--identity` 或 `--profile` 明确选择。它在真实握手、截图采集和正常退出成功后保存准备状态。重复 setup 会复用有效签名产物并再次验证；日常 `connect` 使用已准备的 Runner，无需传入 `.xctestrun` 或搜索 `.build`。配套 Runner 变化、签名到期或产物损坏时会明确要求重新 setup。见[升级与续签](docs/onboarding.md#升级与续签)。
 
-当前提供 `build-runner`、`devices`、`connect`、`status`、`apps`、`open`、`observe`、`inspect`、`tap`、`swipe`、`type`、`press`、`disconnect`。`devices` 返回 CoreDevice 已知设备和原生连接状态，connect 检查是否能建立会话；`apps` 查询已安装 App 的名称和 bundle ID，支持 `--query` 筛选，每页最多 50 项，按返回的 `nextOffset` 继续读取。见 [发现接口与完整调用验收](docs/discovery.md)。
+`connect` 通过 Xcode 的 `test-without-building` 安装并启动 Runner，在宿主和 Runner 均可响应后返回，agent 不需要单独启动后台服务。每条 CLI 命令结束后，宿主继续持有原 XCTest 会话。会话结束后，宿主释放自己的 xcodebuild/Runner 资源并退出。
+
+当前提供 `setup`、`build-runner`（源码开发）、`devices`、`connect`、`status`、`apps`、`open`、`observe`、`inspect`、`tap`、`swipe`、`type`、`press`、`disconnect`。`devices` 返回 CoreDevice 已知设备和原生连接状态，connect 检查是否能建立会话；`apps` 查询已安装 App 的名称和 bundle ID，支持 `--query` 筛选，每页最多 50 项，按返回的 `nextOffset` 继续读取。见 [发现接口与完整调用验收](docs/discovery.md)。
 
 CoreDevice 接入失败会返回失败阶段和原始错误：`coredevice_initialization_timeout` 表示服务初始化超时，`coredevice_access_denied` 表示原始输出包含明确的权限拒绝，其余保留 `coredevice_failed`。沙盒内发生初始化超时或权限拒绝时，先通过调用工具的授权机制，在允许 CoreDevice 通信的本机环境中对照执行一次只读 `devices`，再决定后续操作；不要仅凭超时或 USB 可见就确诊服务故障，也不要连续重试或默认重启服务。详见 [接入诊断](docs/discovery.md#接入失败诊断)。
 
@@ -61,9 +55,21 @@ CoreDevice 接入失败会返回失败阶段和原始错误：`coredevice_initia
 
 调用 agent 应先读实际选中值，再调整并重新 observe 核对；即使画面或值没变，已派发动作也会使旧引用失效。出现连续无变化或来回跳过目标时，更换速度、结束停留或交互方式，不要只反复猜距离。滚轮只暴露为 scroll_view 时，不能假定支持原生 picker 按值设置。使用 `inspect oN:eN` 直接读取相关控件的 frame；文字 frame 的顶边不等于时间线等业务区域的边界，须结合中心位置和截图定位。日程等范围输入应分别核对开始和结束值，不能沿用默认时长后就宣称已验证任意时长设置。
 
-`tap/swipe/type/press` 在全部输入调用结束后自动检测画面稳定：约每 200ms 采样，至少 3 帧的全帧像素 SHA-256 一致且覆盖至少 400ms，才返回 `completed`。结果包含 `execution.inputCompleted`、`stability` 和 `frame.screenshot` 本地路径。5 秒检测预算内未稳定则返回 `unknown` / `frame_stability_timeout`，保留输入事实与最后一帧；调用 agent 先观察，不重发，也不额外猜测“等待 Lark 动画”。当前协议为 `actionVersion=5`、`observationVersion=2`、`screenGuardVersion=1`；旧 Runner 不支持速度与停留参数，连接时会要求重新 build-runner，不能复用旧协议的产物。
+`tap/swipe/type/press` 在全部输入调用结束后自动检测画面稳定：约每 200ms 采样，至少 3 帧的全帧像素 SHA-256 一致且覆盖至少 400ms，才返回 `completed`。结果包含 `execution.inputCompleted`、`stability` 和 `frame.screenshot` 本地路径。5 秒检测预算内未稳定则返回 `unknown` / `frame_stability_timeout`，保留输入事实与最后一帧；调用 agent 先观察，不重发，也不额外猜测“等待 Lark 动画”。当前协议为 `actionVersion=5`、`observationVersion=2`、`screenGuardVersion=1`；旧 Runner 不支持速度与停留参数。发布用户须安装配套版本并 setup，源码开发者重新 build-runner，不能复用旧协议的产物。
 
 调用 agent 的命令执行工具若提前返回后台任务 ID（例如 `exec_command` 的 `session_id`），必须保留完整返回对象，并通过对应的续读工具（例如 `write_stdin`）取得原命令的退出码和输出。这个 ID 属于命令执行工具，与 AgentSoma 的设备 `session` 不同。不能只打印 `output` 而丢弃任务 ID，也不能用固定 sleep 加重复 `status` 来猜测原命令是否结束。
+
+## 源码开发
+
+```sh
+swift build
+swift test
+.build/debug/agentsoma build-runner --team "$APPLE_TEAM_ID"
+# 使用构建结果中的实际 xctestrun 路径。
+.build/debug/agentsoma connect --device "$IOS_UDID" --xctestrun "$SIGNED_XCTESTRUN"
+```
+
+唯一源码库依赖是锁定为 1.5.0 的 [Swift ArgumentParser](https://github.com/apple/swift-argument-parser/tree/1.5.0)。Runner 使用仓库内的独立 Xcode 工程，不依赖 Fixture、XcodeGen 或 WDA。源码开发和发布用户的签名路径分别见[首次接入](docs/onboarding.md)。
 
 ## 生命周期与输出
 

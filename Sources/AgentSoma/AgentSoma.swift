@@ -14,8 +14,8 @@ struct SessionOptions: ParsableArguments {
 @main
 struct AgentSoma: ParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "agentsoma", abstract: "Eyes and hands for agents operating a real iPhone.",
-        subcommands: [BuildRunner.self, Devices.self, Connect.self, Status.self, Apps.self, Open.self, Observe.self, Inspect.self, Tap.self, Swipe.self, TypeText.self, Press.self, Disconnect.self, Host.self])
+        commandName: "agentsoma", abstract: "Eyes and hands for agents operating a real iPhone.", version: RunnerSetup.releaseVersion,
+        subcommands: [Setup.self, BuildRunner.self, Devices.self, Connect.self, Status.self, Apps.self, Open.self, Observe.self, Inspect.self, Tap.self, Swipe.self, TypeText.self, Press.self, Disconnect.self, Host.self])
     @OptionGroup var options: SessionOptions
 }
 
@@ -48,15 +48,31 @@ struct BuildRunner: ParsableCommand {
 struct Connect: ParsableCommand {
     static let configuration = CommandConfiguration(abstract: "Start a session and return once the Runner is ready.")
     @Option(help: "Connected iPhone UDID or CoreDevice identifier.") var device: String
-    @Option(help: "Signed .xctestrun path returned by build-runner.") var xctestrun: String
+    @Option(help: "Developer override: explicit signed .xctestrun. Release users run setup once, then omit this option.") var xctestrun: String?
     @Option(help: "Idle duration, such as 30m, 60m or 10s.") var idleTimeout = "30m"
 
     mutating func run() throws {
         try output {
-            try SessionClient.connect(device: device,
-                xctestrun: URL(fileURLWithPath: xctestrun).standardizedFileURL,
-                idleTimeout: IdleTimeout(idleTimeout))
+            if let xctestrun {
+                return try SessionClient.connect(device: device,
+                    xctestrun: URL(fileURLWithPath: xctestrun).standardizedFileURL,
+                    idleTimeout: IdleTimeout(idleTimeout))
+            }
+            return try RunnerSetup.connect(device: device, idleTimeout: IdleTimeout(idleTimeout))
         }
+    }
+}
+
+struct Setup: ParsableCommand {
+    static let configuration = CommandConfiguration(abstract: "Re-sign and deploy this release's precompiled Runner; verify connection and capture. No source compilation.")
+    @Option(help: "Connected iPhone UDID or CoreDevice identifier.") var device: String
+    @Option(help: "iOS development .mobileprovision file; otherwise use saved or matching Xcode profiles.") var profile: String?
+    @Option(help: "Apple Development signing certificate SHA-1; required only when selection is ambiguous.") var identity: String?
+    @Option(help: "Apple development team ID to select.") var team: String?
+    @Option(help: "Runner app's bundle ID on iPhone; saved for subsequent setup and connections.") var bundleID: String?
+
+    mutating func run() throws {
+        try output { ["ok": true, "result": try RunnerSetup.setup(device: device, profile: profile, identity: identity, team: team, bundleID: bundleID)] }
     }
 }
 

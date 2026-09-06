@@ -139,10 +139,14 @@ final class XCTestBackend: SessionBackend {
     }
 
     static func validateCapabilities(_ result: [String: Any]) throws {
-        guard result["lifecycleOwner"] as? String == "host", result["observationVersion"] as? Int == 2,
-              result["actionVersion"] as? Int == 5, result["launchVersion"] as? Int == 1,
-              result["frameStabilityVersion"] as? Int == 1, result["screenGuardVersion"] as? Int == 1 else {
-            throw SomaError("runner_needs_rebuild", "Run build-runner for swipe speed and hold controls (actionVersion 5), then connect with its new .xctestrun")
+        let expected = ["observationVersion": 2, "actionVersion": 5, "launchVersion": 1, "frameStabilityVersion": 1, "screenGuardVersion": 1]
+        var differences = expected.keys.sorted().compactMap { key -> String? in
+            let actual = result[key] as? Int
+            return actual == expected[key] ? nil : "\(key): expected \(expected[key]!), received \(actual.map(String.init) ?? "missing")"
+        }
+        if result["lifecycleOwner"] as? String != "host" { differences.append("lifecycleOwner: expected host") }
+        if !differences.isEmpty {
+            throw SomaError("runner_needs_rebuild", "Runner is incompatible (\(differences.joined(separator: "; "))). Release users: install matching CLI/Runner resources and run setup. Source developers: run build-runner and use its new .xctestrun")
         }
     }
 
