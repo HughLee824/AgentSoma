@@ -2,7 +2,7 @@
 
 Homebrew distribution for [AgentSoma](https://github.com/HughLee824/AgentSoma).
 
-The Tap is being prepared. The installation command becomes available after the first stable release and formula update:
+Install the stable release:
 
 ```sh
 brew install HughLee824/tap/agentsoma

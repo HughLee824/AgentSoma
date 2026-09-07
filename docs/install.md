@@ -8,11 +8,11 @@ AgentSoma 为外部 agent 提供真实 iPhone 的观察和操作能力。本包�
 - USB 连接且已信任 Mac 的 iPhone，开启 Developer Mode 并保持解锁。
 - Keychain 中可用的 Apple Development 证书及对应私钥，以及授权该证书、iPhone 和 Runner bundle ID 的 iOS development profile。
 
-当前实测组合为 Apple Silicon / macOS 15.0.1 / Xcode 16.0 / iPhone 12 Pro / iOS 26.6，使用已有付费开发团队的签名。免费 Personal Team 的首次配置与续签尚未验收。
+`0.1.0` 正式包实测组合为 Apple Silicon / macOS 15.0.1 / Xcode 16.0 / iPhone 12 Pro / iOS 26.6.1，使用已有付费开发团队的签名。免费 Personal Team 的首次配置与续签尚未验收。
 
 ## Homebrew 安装
 
-Homebrew 渠道提供已发布的稳定版；以下命令需要对应 Release 和 Tap formula 已发布。RC 预发布包使用下方手动安装方式。
+Homebrew 渠道已提供 `0.1.0` 稳定版，公开安装及安装后的真机连接已通过验收。RC 预发布包使用下方手动安装方式。
 
 ```sh
 brew install HughLee824/tap/agentsoma
@@ -61,7 +61,7 @@ agentsoma --version
 
 把 `export PATH="$HOME/.local/bin:$PATH"` 加到 shell 配置（zsh 通常为 `~/.zshrc`），以便新终端使用。切换 Homebrew 与手动安装时，用 `command -v agentsoma` 核对实际入口。必须保留整个包的 `bin` 与 `libexec` 相对位置，不能只复制一个可执行文件。
 
-包内包含项目 MIT 许可证、Swift ArgumentParser 许可证及版本/源码提交信息。当前 Mac CLI 使用 ad-hoc 签名，未做 Developer ID 签名或公证。RC 已验证上述命令行下载安装路径；浏览器下载可能附带系统隔离标记，本次 Safari 下载测试未通过首次运行，暂不作为已验收的安装方式。渠道发布状态与设备兼容性记录见[发布说明](https://github.com/HughLee824/AgentSoma/blob/main/docs/release-setup.md)。
+包内包含项目 MIT 许可证、Swift ArgumentParser 许可证及版本/源码提交信息。当前 Mac CLI 使用 ad-hoc 签名，未做 Developer ID 签名或公证。`0.1.0` 已验证上述命令行下载安装路径和公共 Homebrew 安装；浏览器下载可能附带系统隔离标记，RC 的 Safari 下载测试未通过首次运行，暂不作为已验收的安装方式。渠道发布状态与设备兼容性记录见[发布说明](https://github.com/HughLee824/AgentSoma/blob/main/docs/release-setup.md)。
 
 ## 首次连接
 

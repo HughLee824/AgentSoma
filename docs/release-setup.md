@@ -125,6 +125,18 @@ formula 将原包的 `bin` 与 `libexec` 一起放在 Homebrew keg 的 `libexec`
 
 已有本地开发候选包的验收记录覆盖 Apple Silicon / macOS 15.0.1 / Xcode 16.0 / iPhone 12 Pro / iOS 26.6，以及已有付费开发团队签名条件下的包校验、搬移、重签、重复 setup 和正常连接。这些是路线验证，不自动构成后来 GitHub 构建包的验收结果。每次发布的结果以对应草稿的包摘要和本地验收记录为准。原始设备记录、候选包、签名资料和日志保留在本地。
 
+### 0.1.0 正式发布验收
+
+2026-09-07 已发布 [0.1.0](https://github.com/HughLee824/AgentSoma/releases/tag/v0.1.0)，源码提交为 `25bef5092aac42a3f60bf1ec01b7ba79e12bee5d`，安装包 SHA-256 为 `c2eb4f1ee1e2c61cf05bfae46076f38d18c3385a6b0a5ab2c9181ed933fec80d`。本次验收使用从 GitHub 下载并搬移到源码目录外的同一安装包；发布时未重新构建或替换资产。
+
+- Apple Silicon / macOS 15.0.1 / Xcode 16.0 / iPhone 12 Pro / iOS 26.6.1，已有付费开发签名。首次 setup 无需编译，重复 setup 复用成功。
+- 连接、应用发现、打开、观察、受保护输入及断开通过。计算器 `125 × 8 = 1,000` 经截图与界面文本核对；断开重连后再次打开历史记录，确认今天的计算仍在。一次屏幕变化拦截未派发输入，刷新观察后恢复。
+- setup 验证会话和业务会话均正常清理；业务会话的 host/xcodebuild 退出及观察缓存删除另行核对。
+- [Tap 更新](https://github.com/HughLee824/homebrew-tap/actions/runs/34123914541)通过，formula 提交为 `ab3cc80fc7af9db4483177f334c9f3cd686e1505`。匿名下载的三个公开资产与验收文件逐字节一致，公开 tag 指向上述源码提交。
+- 实际执行 `brew install HughLee824/tap/agentsoma` 和 `brew test HughLee824/tap/agentsoma` 通过，CLI/Runner 文件摘要与发布清单一致。使用 `/opt/homebrew/bin/agentsoma` 完成真机连接、截图检查、点击和正常断开。
+
+本次证明现有开发签名条件下的正式包与公共安装入口可用，未扩展免费账号、全新签名环境或浏览器渠道的支持范围。私有设备标识、签名资料、截图与命令原始记录保留在本地。
+
 ## 尚未验收的发布条件
 
 - 免费 Apple 账号是否列为首发正式支持，以及首次 provisioning 和七天到期后的续签恢复。

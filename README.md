@@ -67,7 +67,7 @@ agentsoma connect --device "$IOS_UDID" --xctestrun "$SIGNED_XCTESTRUN"
 
 #### From a release package
 
-The distribution workflow targets **Apple Silicon / macOS 15+**. Check [GitHub Releases](https://github.com/HughLee824/AgentSoma/releases) for available packages. Once a stable release and Tap formula are published:
+The precompiled release targets **Apple Silicon / macOS 15+**. Install the stable version from the [Homebrew Tap](https://github.com/HughLee824/homebrew-tap), or see [GitHub Releases](https://github.com/HughLee824/AgentSoma/releases) for manual downloads:
 
 ```sh
 brew install HughLee824/tap/agentsoma
