@@ -119,6 +119,10 @@ formula 将原包的 `bin` 与 `libexec` 一起放在 Homebrew keg 的 `libexec`
 
 ## 验证范围
 
+2026-09-07 对公开 `0.1.0-rc.1` 包补测下载渠道，包 SHA-256 为 `52ff3e7c8e90d142a704ec1914433c506ebcc4d92245b3a48db188d0934a174d`。本机 Apple Silicon / macOS 15.0.1 下，`curl` 下载、校验、解压及版本/setup/connect 帮助命令通过。Safari 下载内容与同一 RC 一致，解压后 CLI 保留隔离属性，但首次运行未通过；Chrome 下载在资产重定向处返回 `ERR_BLOCKED_BY_CLIENT`。这些结果分别记录，不将浏览器下载失败等同于 CLI 签名失败，也不将命令行安装通过外推为浏览器渠道通过。本轮没有重复真机业务验收。
+
+当前采用命令行下载的已验证路径，保持 ad-hoc 签名。Developer ID 签名与公证不作为所有渠道统一的发布门槛；浏览器直接下载安装体验仍需解决后单独验收。上述 RC 补测时公共 Tap 尚未上架，已有 CI 中的 Homebrew 安装检查不代表公共 `brew install` 入口已可用；后续上架结果以 Tap 和对应 Release 为准。
+
 已有本地开发候选包的验收记录覆盖 Apple Silicon / macOS 15.0.1 / Xcode 16.0 / iPhone 12 Pro / iOS 26.6，以及已有付费开发团队签名条件下的包校验、搬移、重签、重复 setup 和正常连接。这些是路线验证，不自动构成后来 GitHub 构建包的验收结果。每次发布的结果以对应草稿的包摘要和本地验收记录为准。原始设备记录、候选包、签名资料和日志保留在本地。
 
 ## 尚未验收的发布条件
@@ -126,6 +130,6 @@ formula 将原包的 `bin` 与 `libexec` 一起放在 Homebrew keg 的 `libexec`
 - 免费 Apple 账号是否列为首发正式支持，以及首次 provisioning 和七天到期后的续签恢复。
 - 全新 Mac 从无证书/profile 到完成 setup；更多 Xcode/iOS 组合与 Intel Mac。
 - 免 Xcode 启动。
-- GitHub 托管 runner 上的首轮发布工作流、公共下载后的全新 Mac / Gatekeeper 安装体验；是否增加 Developer ID 签名与公证根据渠道验收决定。
+- 公共下载后的全新 Mac / Gatekeeper 安装体验；是否增加 Developer ID 签名与公证根据渠道验收决定。
 
 这些条件不由本机已有付费开发团队的成功结果推断，也不阻塞当前预编译路线的代码与本机验收。

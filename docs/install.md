@@ -12,7 +12,7 @@ AgentSoma 为外部 agent 提供真实 iPhone 的观察和操作能力。本包�
 
 ## Homebrew 安装
 
-当前正在准备首次公共发布；以下命令在稳定版 Release 发布且 Tap 更新后可用。
+Homebrew 渠道提供已发布的稳定版；以下命令需要对应 Release 和 Tap formula 已发布。RC 预发布包使用下方手动安装方式。
 
 ```sh
 brew install HughLee824/tap/agentsoma
@@ -23,14 +23,23 @@ agentsoma --version
 
 ## 手动下载安装
 
-从 [GitHub Releases](https://github.com/HughLee824/AgentSoma/releases) 的同一个版本下载 `agentsoma-<version>-macos-arm64.tar.gz` 和同名 `.tar.gz.sha256`，放在同一目录。预发布版本也使用此方式安装。
+当前推荐使用终端下载。先在 [GitHub Releases](https://github.com/HughLee824/AgentSoma/releases) 确认版本，再在一个新的空目录中执行以下命令。预发布版本也使用此方式安装。
 
-在下载目录打开终端，将下面的版本换为实际下载版本，再校验和解压：
+下载、校验和解压任一步失败都会停止；版本号不含 `v`：
 
 ```sh
-AGENTSOMA_VERSION=0.1.0 # 示例；替换为实际 Release 版本，不含 v
+AGENTSOMA_VERSION=0.1.0 # 先确认此版本已发布，或替换为要安装的已发布版本
 AGENTSOMA_PACKAGE="agentsoma-${AGENTSOMA_VERSION}-macos-arm64"
-shasum -a 256 -c "${AGENTSOMA_PACKAGE}.tar.gz.sha256" && tar -xzf "${AGENTSOMA_PACKAGE}.tar.gz"
+AGENTSOMA_RELEASE_URL="https://github.com/HughLee824/AgentSoma/releases/download/v${AGENTSOMA_VERSION}"
+(
+  set -e
+  curl --fail --location --show-error --output "${AGENTSOMA_PACKAGE}.tar.gz" \
+    "${AGENTSOMA_RELEASE_URL}/${AGENTSOMA_PACKAGE}.tar.gz"
+  curl --fail --location --show-error --output "${AGENTSOMA_PACKAGE}.tar.gz.sha256" \
+    "${AGENTSOMA_RELEASE_URL}/${AGENTSOMA_PACKAGE}.tar.gz.sha256"
+  shasum -a 256 -c "${AGENTSOMA_PACKAGE}.tar.gz.sha256"
+  tar -xzf "${AGENTSOMA_PACKAGE}.tar.gz"
+)
 ```
 
 仅在校验显示 `OK` 且解压成功后继续。校验失败时重新下载，不运行包中的文件。GitHub 自动生成的 Source code 压缩包是源码，不是这里的预编译安装包。
@@ -52,7 +61,7 @@ agentsoma --version
 
 把 `export PATH="$HOME/.local/bin:$PATH"` 加到 shell 配置（zsh 通常为 `~/.zshrc`），以便新终端使用。切换 Homebrew 与手动安装时，用 `command -v agentsoma` 核对实际入口。必须保留整个包的 `bin` 与 `libexec` 相对位置，不能只复制一个可执行文件。
 
-包内包含项目 MIT 许可证、Swift ArgumentParser 许可证及版本/源码提交信息。当前 Mac CLI 使用 ad-hoc 签名，尚未完成 Developer ID 签名、公证或浏览器下载后的 Gatekeeper 验收；渠道发布状态与设备兼容性记录见[发布说明](https://github.com/HughLee824/AgentSoma/blob/main/docs/release-setup.md)。
+包内包含项目 MIT 许可证、Swift ArgumentParser 许可证及版本/源码提交信息。当前 Mac CLI 使用 ad-hoc 签名，未做 Developer ID 签名或公证。RC 已验证上述命令行下载安装路径；浏览器下载可能附带系统隔离标记，本次 Safari 下载测试未通过首次运行，暂不作为已验收的安装方式。渠道发布状态与设备兼容性记录见[发布说明](https://github.com/HughLee824/AgentSoma/blob/main/docs/release-setup.md)。
 
 ## 首次连接
 
