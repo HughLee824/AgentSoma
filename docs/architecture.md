@@ -47,6 +47,8 @@ The CLI's optional action `--observe` composes two existing host requests and re
 
 ```text
 AgentSoma/
+├── .agents/plugins/                 # Codex Git marketplace
+├── .claude-plugin/                  # Claude Code Git marketplace
 ├── .github/workflows/               # CI and release workflows
 ├── Package.swift                    # Executable, core library, and test resources
 ├── Package.resolved                 # Pinned Swift dependency resolution
@@ -62,8 +64,10 @@ AgentSoma/
 ├── docs/
 │   ├── examples/observe/            # Curated CLI output example
 │   └── *.md                        # Public guides and architecture
-├── scripts/                         # Release tooling and its tests
-├── skills/agentsoma/                # Installable agent instructions and call templates
+├── scripts/                         # Release/plugin tooling and tests
+├── skills/agentsoma/                # Canonical skill, client adapters and preflight
+├── plugins/agentsoma/               # Generated self-contained dual-client plugin
+├── website/                         # Static public entry point and Sites configuration
 ├── packaging/homebrew-tap/          # Tap setup and update workflow
 ├── README.md                        # Default English entry point
 ├── README.zh-CN.md                  # Chinese entry point
@@ -71,6 +75,8 @@ AgentSoma/
 ```
 
 Commit files needed to build, test, distribute, or understand the public project. Keep the Swift lockfile, shared Xcode project/scheme, release scripts, and sanitized test fixtures in Git. Xcode user settings are local; do not ignore all `.xcodeproj` files.
+
+The plugin contains instructions and a preflight script; it does not add another runtime service. Edit `skills/agentsoma/`, then run `python3 scripts/sync-plugin.py` to update the committed distribution. CI rejects drift. Website publishing and the public client installation path are documented in [public access release](public-access-release.md).
 
 Test inputs belong under `Tests/AgentSomaCoreTests/Fixtures` and are loaded through SwiftPM's resource bundle. Tests must pass in a fresh checkout without `spikes/`, private device captures, or files under `docs/examples`. Published examples should illustrate the current interface, use placeholder paths and IDs, and identify any omitted media.
 

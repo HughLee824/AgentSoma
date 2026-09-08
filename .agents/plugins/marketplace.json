@@ -1,0 +1,20 @@
+{
+  "name": "agentsoma",
+  "interface": {
+    "displayName": "Agentsoma"
+  },
+  "plugins": [
+    {
+      "name": "agentsoma",
+      "source": {
+        "source": "local",
+        "path": "./plugins/agentsoma"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

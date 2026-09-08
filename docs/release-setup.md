@@ -55,15 +55,15 @@ AgentSoma 仍是 macOS CLI。Mac Developer ID 签名、公证是下载渠道与�
 
 | 执行位置 | 检查范围 | 不代表什么 |
 | --- | --- | --- |
-| GitHub 的 CI 工作流 | Swift/Python 测试 | 发布包已构建或真机验收通过 |
+| GitHub 的 CI 工作流 | Swift/Python/Node 测试、无开发签名 Runner 构建、插件归档与网站构建 | 发布包已发布或真机验收通过 |
 | GitHub 的 Draft release 工作流 | 测试、编译、归档、搬移、Homebrew 安装与摘要校验 | setup、设备连接或业务任务通过 |
 | 维护者本地 Mac + iPhone | 草稿安装包的 setup、连接、观察、操作、升级及业务结果 | 未测试的设备、系统和签名组合也兼容 |
 
 [GitHub 托管 runner](https://docs.github.com/en/actions/concepts/runners/github-hosted-runners) 提供构建主机，不附带供此工作流使用的 iPhone。当前不接入云真机平台或 self-hosted runner；未来若自动化真机检查，需要另外提供 Mac + iPhone 测试环境。
 
 1. 将本次发布源码提交到 `HughLee824/AgentSoma` 的 `main`，让 CI 通过。
-2. 在 Actions 中运行 **Draft release**，填写未使用过的版本，不含 `v`。工作流只允许从主仓库的 `main` 执行，运行 Swift/Python 测试，构建干净源码，验证归档、搬移和 Homebrew 安装后的全部 CLI/Runner 摘要。
-3. 云端检查通过后，独立的写入任务创建 GitHub Release **草稿**，附上 tar.gz、SHA-256 和从同一归档生成的 `agentsoma.rb`。说明自动填入版本、源码提交、包摘要和工作流链接，**本地真机验收始终初始化为 pending**。已有 tag 拒绝复用，不覆盖旧版本。包含 `-` 的版本自动标记 prerelease。
+2. 在 Actions 中运行 **Draft release**，填写未使用过的版本，不含 `v`。工作流只允许从主仓库的 `main` 执行，运行 Swift/Python/Node 测试与插件一致性检查，构建干净源码，验证归档、搬移和 Homebrew 安装后的全部 CLI/Runner 摘要。
+3. 云端检查通过后，独立的写入任务创建 GitHub Release **草稿**，附上 tar.gz、SHA-256、从同一归档生成的 `agentsoma.rb`，以及从该源码验证的插件 ZIP 与校验文件。说明自动填入版本、源码提交、包摘要和工作流链接，**本地真机验收始终初始化为 pending**。已有 tag 拒绝复用，不覆盖旧版本。包含 `-` 的版本自动标记 prerelease。
 4. 在本地下载该草稿的安装包，按下文完成真机验收。将结果摘要填回草稿，补齐版本变化、升级说明和兼容性范围，保留失败和未测试项。
 5. 维护者核对验收记录与草稿的版本、源码 SHA、包 SHA-256 一致后，手动发布该草稿。发布使用本地验收过的同一批资产，不重新构建或替换包。这是维护者发布前的检查；当前工作流只创建草稿，不自动判断业务结果，也不自动阻止维护者在 GitHub 页面点击发布。
 6. 稳定版发布后，在 `HughLee824/homebrew-tap` 的 Actions 运行 **Update AgentSoma**，填写相同版本。它拒绝草稿和预发布版，校验归档、源码提交与 tag，再生成并对比 release 中的 formula，最后提交到 Tap 的 `main`。重复同版本不产生空提交。

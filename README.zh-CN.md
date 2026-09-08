@@ -12,7 +12,7 @@ AgentSoma 是一个 macOS CLI，让外部 agent 能够发现 App、读取截图�
 
 调用 agent 需要具备本机命令执行和 PNG 读图能力。设备控制链路在你的 Mac 和 iPhone 上本地运行。
 
-[快速开始](#快速开始) · [命令概览](#命令概览) · [工作原理](#工作原理) · [文档导航](#文档导航) · [参与贡献](#参与贡献)
+[网站](https://agentsoma.rich-spool-5142.chatgpt.site) · [首个 iPhone 任务](docs/first-task.md) · [客户端插件](docs/plugins.md) · [命令概览](#命令概览) · [文档导航](#文档导航)
 
 ## 为什么选择 AgentSoma？
 
@@ -23,6 +23,8 @@ AgentSoma 是一个 macOS CLI，让外部 agent 能够发现 App、读取截图�
 - **精简的原生技术栈。** 使用 Swift、Apple 设备工具和薄 XCTest Runner。运行时无需 Python、Node.js、WebDriverAgent、`iproxy` 或 `pymobiledevice3`。
 
 ## 快速开始
+
+公开用户推荐按 [首次任务指南](docs/first-task.md)走 Homebrew → Codex / Claude Code 插件 → 设备 setup → 已验证的设置任务流程。下方源码入口用于开发。
 
 ### 前置条件
 
@@ -141,7 +143,21 @@ agentsoma --session "$SESSION" disconnect
 
 ## Agent 接入约定
 
-仓库附带 [AgentSoma skill](skills/agentsoma/SKILL.md)，包含设备入口、滚轮调整策略和 [Codex 固定调用模板](skills/agentsoma/references/codex-calls.md)。将整个 `skills/agentsoma` 文件夹复制到客户端的 skill 目录（Codex 为 `$CODEX_HOME/skills`，未设置时为 `~/.codex/skills`），在新任务中加载或用 `$agentsoma` 调用；仅安装 CLI 不会注册 skill。
+推荐从项目自有公开 Git marketplace 安装自包含 [AgentSoma 插件](plugins/agentsoma/README.md)：
+
+```sh
+# Codex：命令名已核对 CLI 0.146.0
+codex plugin marketplace add HughLee824/AgentSoma
+codex plugin add agentsoma@agentsoma
+
+# Claude Code
+claude plugin marketplace add HughLee824/AgentSoma
+claude plugin install agentsoma@agentsoma
+```
+
+在新会话中分别调用 Codex 的 `$agentsoma:agentsoma` 或 Claude Code 的 `/agentsoma:agentsoma`。插件共用设备规则，包含只读前置检查、[Codex 模板](skills/agentsoma/references/codex-calls.md)及 [Claude Code Bash/Read 指引](skills/agentsoma/references/claude-code.md)。它不安装 CLI 或准备签名。Xcode、setup、首个任务和升级步骤见[插件指南](docs/plugins.md)与[完整首次任务路径](docs/first-task.md)。自有 marketplace 分发不代表已进入官方目录。
+
+仍支持手动将完整 `skills/agentsoma` 复制到客户端 skill 目录（Codex 为 `$CODEX_HOME/skills`，未设置时为 `~/.codex/skills`），在新任务中调用 `$agentsoma`。同时安装了两种形式时，用插件的命名空间调用避免混淆。明确选择源码流程时，前置检查支持 `--source`，连接使用已提供的签名 `.xctestrun`。
 
 在 `open/tap/swipe/type/press` 后添加 `--observe`，即可返回包含独立 `action` 与 `observation` 回执的单个 JSON。两者均成功才退出 0；观察失败不会覆盖动作结果或重放输入。明确未派发且无需刷新时跳过观察。客户端顺序调用既有协议，兼容旧宿主，但不在两次请求之间独占设备。读取 `observation.result.text` 和其中的 `screenshot` 后再选择下一动作。详见[契约与示例](docs/actions.md#动作后观察)。
 
@@ -205,10 +221,11 @@ AgentSoma 处于早期开发阶段。真机验收覆盖上述实测环境，不�
 
 ## 文档导航
 
-详细使用指南目前以中文提供，架构指南以英文提供；中英文 README 覆盖相同的入门流程。
+完整首次任务和架构指南以英文提供；详细命令和签名指南以中文提供。中英文 README 覆盖相同的入门流程。
 
 | 文档 | 内容 |
 | --- | --- |
+| [首个 iPhone 任务](docs/first-task.md) · [客户端插件](docs/plugins.md) | Codex / Claude Code 公开安装、设备准备、任务验证及升级。 |
 | [安装说明](docs/install.md) | 发布包、Homebrew、升级与卸载。 |
 | [首次接入与故障排查](docs/onboarding.md) | Xcode、签名、首次连接、续签和常见错误。 |
 | [设备与 App 发现](docs/discovery.md) | 发现命令、分页与 CoreDevice 诊断。 |
@@ -226,11 +243,14 @@ AgentSoma 处于早期开发阶段。真机验收覆盖上述实测环境，不�
 ```sh
 swift test
 python3 -m unittest discover -s scripts/tests -v
+node --test scripts/tests/test_agent_templates.mjs
+python3 scripts/sync-plugin.py --check
+python3 website/build.py
 ```
 
 Python 3.9+ 仅用于发布工具和开发测试，不是已安装 CLI 的运行依赖。按上述顺序执行：CLI 集成测试使用 Swift 构建生成的 `.build/debug/agentsoma`，缺失时会跳过。唯一 Swift 包依赖为 [Swift ArgumentParser](https://github.com/apple/swift-argument-parser/tree/1.5.0)，锁定版本 `1.5.0`。
 
-修改 Codex skill 模板时，另用 Node.js 22+ 运行 `node --test scripts/tests/test_agent_templates.mjs`。测试将文档中的 JavaScript 用于受控工具响应；Node 仅为开发测试所需，不是 CLI 或 skill 执行环境的依赖。
+CI 使用 Node.js 22+ 将文档中的调用模板用于受控工具响应；Node 仅为开发测试所需。修改 canonical skill 后运行 `python3 scripts/sync-plugin.py` 更新包内副本；发布变更时同步提升两份插件清单版本。CI 还会无签名编译 Runner，并打包网站与插件供审阅。具体命令和真机验收要求见[公开接入发布检查](docs/public-access-release.md)。
 
 CI 没有真实 iPhone。涉及设备行为的改动还需重新构建 Runner，并在真机验证受影响流程。问题报告应包含 Mac/Xcode/iOS 版本、复现步骤、预期行为和相关错误。分享日志前移除私人画面内容、provisioning profile 和签名资料。修改公共使用说明时，请同步更新中英文 README。新增文件请遵循[目录约定](docs/architecture.md#repository-layout)，本地实验和设备记录不进入 Git。
 

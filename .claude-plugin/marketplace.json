@@ -1,0 +1,11 @@
+{
+  "name": "agentsoma",
+  "owner": {"name": "AgentSoma contributors"},
+  "plugins": [
+    {
+      "name": "agentsoma",
+      "source": "./plugins/agentsoma",
+      "description": "Eyes and hands for agents operating a real iPhone."
+    }
+  ]
+}

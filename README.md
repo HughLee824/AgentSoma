@@ -12,7 +12,7 @@ AgentSoma is a macOS CLI that lets an external agent discover apps, read screens
 
 An agent needs local command execution and the ability to read PNG files. The device control path runs locally on your Mac and iPhone.
 
-[Quick start](#quick-start) · [Commands](#commands) · [How it works](#how-it-works) · [Documentation](#documentation) · [Contributing](#contributing)
+[Website](https://agentsoma.rich-spool-5142.chatgpt.site) · [First iPhone task](docs/first-task.md) · [Client plugins](docs/plugins.md) · [Commands](#commands) · [Documentation](#documentation)
 
 ## Why AgentSoma?
 
@@ -23,6 +23,8 @@ An agent needs local command execution and the ability to read PNG files. The de
 - **Use a small native stack.** Swift, Apple's device tooling, and a thin XCTest Runner. The runtime needs no Python, Node.js, WebDriverAgent, `iproxy`, or `pymobiledevice3`.
 
 ## Quick start
+
+For the public install path, follow [Your first iPhone task](docs/first-task.md): Homebrew → Codex or Claude Code plugin → device setup → a verified Settings task. The source workflow below is for development.
 
 ### Prerequisites
 
@@ -141,7 +143,21 @@ Coordinates use **screen points**, not screenshot pixels. Swipe direction descri
 
 ## Agent integration
 
-The repository includes an [AgentSoma skill](skills/agentsoma/SKILL.md) with device routing, wheel-adjustment guidance, and [fixed Codex call templates](skills/agentsoma/references/codex-calls.md). Copy the entire `skills/agentsoma` folder into your client's skill directory (for Codex, `$CODEX_HOME/skills` or `~/.codex/skills`). Load it in a new task or invoke `$agentsoma`; installing the CLI alone does not register the skill.
+Install the self-contained [AgentSoma plugin](plugins/agentsoma/README.md) from this repository's public Git marketplace:
+
+```sh
+# Codex (command names checked on CLI 0.146.0)
+codex plugin marketplace add HughLee824/AgentSoma
+codex plugin add agentsoma@agentsoma
+
+# Claude Code
+claude plugin marketplace add HughLee824/AgentSoma
+claude plugin install agentsoma@agentsoma
+```
+
+Start a new client session and invoke `$agentsoma:agentsoma` in Codex or `/agentsoma:agentsoma` in Claude Code. Follow [the first-task guide](docs/first-task.md) for Xcode, signing, setup, verification, and upgrades. The plugin contains shared device rules, a read-only prerequisite check, [Codex call templates](skills/agentsoma/references/codex-calls.md), and [Claude Code Bash/Read instructions](skills/agentsoma/references/claude-code.md). It does not install the CLI or prepare signing. Distribution through this project's marketplace is separate from an official-directory listing.
+
+Manual skill installation remains available: copy the entire `skills/agentsoma` folder into your client's skill directory (for Codex, `$CODEX_HOME/skills` or `~/.codex/skills`) and invoke `$agentsoma` in a new task. Use the plugin's namespaced invocation if both copies are present. For an explicitly selected source workflow, the prerequisite check accepts `--source` and a supplied signed `.xctestrun`.
 
 Add `--observe` to `open`, `tap`, `swipe`, `type`, or `press` to return one JSON object containing separate `action` and `observation` responses. Exit code zero requires both to succeed; an observation failure never overwrites the action's outcome or replays input. A confirmed rejection without a refresh requirement skips observation. This client-side sequence uses the existing host protocol, including older hosts; it does not reserve the device between requests. Read `observation.result.text` and its `screenshot` before choosing the next input. See [the contract and examples](docs/actions.md#动作后观察).
 
@@ -205,10 +221,11 @@ AgentSoma is in early development. Real-device validation covers the environment
 
 ## Documentation
 
-Detailed usage guides are currently in Chinese; the architecture guide is in English. Both README versions cover the same getting-started workflow.
+The complete first-task and architecture guides are in English; detailed command and signing guides are in Chinese. Both README versions cover the same getting-started workflow.
 
 | Guide | Contents |
 | --- | --- |
+| [First iPhone task](docs/first-task.md) · [Client plugins](docs/plugins.md) | Public install paths for Codex and Claude Code, device setup, verification, and upgrades. |
 | [Installation](docs/install.md) | Release packages, Homebrew, upgrades, and uninstalling. |
 | [Onboarding and troubleshooting](docs/onboarding.md) | Xcode, signing, first connection, renewal, and common errors. |
 | [Device and app discovery](docs/discovery.md) | Discovery commands, pagination, and CoreDevice diagnostics. |
@@ -226,11 +243,14 @@ Run the same checks configured in [CI](.github/workflows/ci.yml):
 ```sh
 swift test
 python3 -m unittest discover -s scripts/tests -v
+node --test scripts/tests/test_agent_templates.mjs
+python3 scripts/sync-plugin.py --check
+python3 website/build.py
 ```
 
 Python 3.9+ is used for release tooling and development tests, not the installed CLI runtime. Run the commands in the order shown: CLI integration tests use `.build/debug/agentsoma` from the Swift build and are skipped when it is absent. The only Swift package dependency is [Swift ArgumentParser](https://github.com/apple/swift-argument-parser/tree/1.5.0), pinned to `1.5.0`.
 
-When changing the Codex skill templates, also run `node --test scripts/tests/test_agent_templates.mjs` with Node.js 22+. These tests execute the documented JavaScript against controlled tool responses; Node is only needed for development tests, not the CLI or the skill's execution environment.
+Node.js 22+ runs the documented call templates against controlled tool responses in CI; it is only needed for development tests. After changing the canonical skill, run `python3 scripts/sync-plugin.py` to update its packaged copy and bump both plugin manifest versions when releasing changed instructions. CI also compiles the Runner without signing and packages the static site and plugin for review. See [public-access release checks](docs/public-access-release.md) for the exact commands and hardware acceptance requirements.
 
 CI does not have a physical iPhone. For device-facing changes, also build a fresh Runner and verify the affected workflow on hardware. Include Mac/Xcode/iOS versions, reproduction steps, expected behavior, and relevant errors in reports. Remove private screen content, provisioning profiles, and signing material before sharing logs. Keep the English and Chinese READMEs in sync when changing shared instructions. Follow the [repository layout](docs/architecture.md#repository-layout) when adding files; local experiments and device records stay outside Git.
 

@@ -2,6 +2,8 @@
 
 AgentSoma 为外部 agent 提供真实 iPhone 的观察和操作能力。本包包含 macOS CLI 和配套预编译 iOS Runner；setup 在本机重签，不编译源码。
 
+从[公开网站](https://agentsoma.rich-spool-5142.chatgpt.site)进入的新用户，安装 CLI 后继续[客户端插件](https://github.com/HughLee824/AgentSoma/blob/main/docs/plugins.md)和[首个真机任务](https://github.com/HughLee824/AgentSoma/blob/main/docs/first-task.md)。插件安装与签名 setup 是两个步骤。
+
 ## 前置条件
 
 - 完整 Xcode，已选为当前开发工具链。
@@ -69,9 +71,11 @@ agentsoma --version
 agentsoma --version
 agentsoma devices
 # IOS_UDID 使用 devices 返回的真实设备标识。
+export IOS_UDID='YOUR_DEVICE_ID'
 agentsoma setup --device "$IOS_UDID"
 agentsoma connect --device "$IOS_UDID"
 # SESSION 使用 connect 返回的设备会话标识。
+export SESSION='SESSION_FROM_CONNECT'
 agentsoma --session "$SESSION" open com.apple.Preferences
 agentsoma --session "$SESSION" observe
 agentsoma --session "$SESSION" disconnect
