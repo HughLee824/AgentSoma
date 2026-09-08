@@ -1,7 +1,7 @@
 <h1>
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/brand/agentsoma-wordmark-dark.svg">
-    <img src="assets/brand/agentsoma-wordmark.png" alt="AgentSoma" width="420">
+    <img src="assets/brand/agentsoma-wordmark.svg" alt="AgentSoma" width="420">
   </picture>
 </h1>
 

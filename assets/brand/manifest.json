@@ -14,6 +14,16 @@
       "font": "Geist Mono",
       "weight": 600,
       "license": "licenses/geist-mono-OFL.txt"
+    },
+    "vector_wordmark": {
+      "symbol": "agent-soma.svg",
+      "symbol_sha256": "c2ee7036cdb6811cb627b9d4b0a1ee6695bb1e8d59392281f9bf2db892c706e7",
+      "font_family": "Geist Mono",
+      "font_weight": 600,
+      "font_version": "Version 1.701",
+      "font_sha256": "5f3d6ad60f29d6cb708414ec6887163d63bf197377ef5417d2483ff31ace6c3b",
+      "generator": "scripts/export-brand-wordmark.py",
+      "layout_reference": "agentsoma-wordmark.png"
     }
   },
   "files": [
@@ -180,9 +190,9 @@
       "format": "text"
     },
     {
-      "path": "agentsoma-wordmark-dark.svg",
-      "bytes": 26029,
-      "sha256": "05cbd142d39f779f9d98cafe635713da6862e823a079c89ed072a2e640234853",
+      "path": "agentsoma-wordmark.svg",
+      "bytes": 8448,
+      "sha256": "752435acef882e0bf386ceb0f3b539a76e1272dda91204da46c04d8d4a4899b9",
       "format": "SVG",
       "viewBox": [
         0,
@@ -190,9 +200,33 @@
         960,
         210
       ],
-      "source": "agentsoma-wordmark.png",
-      "source_sha256": "0765c7674bcbabec17edcf4c94bc5f725d7683cdd914757fcad3a626c3fccf75",
-      "rendering": "Self-contained SVG embedding the original PNG; maps RGB to #f0f6fc while preserving alpha. Not a vector tracing."
+      "rendering": "Vector paths only; no embedded images, filters, or font dependencies"
+    },
+    {
+      "path": "agentsoma-wordmark-dark.svg",
+      "bytes": 8448,
+      "sha256": "8ad355d3cd4b8b72483f8398bc7fb2b41879bed86d9b8a8bac964fc40266b9d8",
+      "format": "SVG",
+      "viewBox": [
+        0,
+        0,
+        960,
+        210
+      ],
+      "rendering": "Vector paths only; no embedded images, filters, or font dependencies"
+    },
+    {
+      "path": "agentsoma-wordmark-source.svg",
+      "bytes": 3398,
+      "sha256": "fac1ca4d16fca0783d72bd6fedc9b6d3a8d8548dfdd09b66fc24212eeef79bef",
+      "format": "SVG",
+      "viewBox": [
+        0,
+        0,
+        960,
+        210
+      ],
+      "rendering": "Editable text and vector symbol paths; requires Geist Mono"
     }
   ]
 }
