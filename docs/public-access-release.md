@@ -47,7 +47,7 @@ Do not silently change content under a published version. For the initial releas
 
 Website source and release instructions live in the separate [agentsoma-website repository](https://github.com/HughLee824/agentsoma-website). Its Cloudflare Worker serves the verified public site at `https://agentsoma.dev`. The repository's `wrangler.jsonc` declares the public output, real 404 handling and custom domains. Connect the repository to Cloudflare Workers Builds using its README to validate and deploy independently of CLI and plugin releases.
 
-After deployment, verify the exact HTTPS URL without an authenticated session. Check installation anchors, client selection, clipboard success/failure, keyboard navigation, and narrow layouts (320, 375, 414 and 768 CSS pixels) as well as desktop. Keep the deployed website commit in the acceptance record. The website's GitHub Actions artifact is a review/build artifact; The configured Cloudflare Workers Builds connection will handle production deployment.
+After deployment, verify the exact HTTPS URL without an authenticated session. Check installation anchors, client selection, clipboard success/failure, keyboard navigation, and narrow layouts (320, 375, 414 and 768 CSS pixels) as well as desktop. Keep the deployed website commit in the acceptance record. The website's GitHub Actions artifact is a review/build artifact. Production is currently deployed manually with Wrangler; automatic Workers Builds remains pending as recorded in the acceptance document.
 
 After deployment, follow the website's two client paths using the public install source. Keep the website's installation text, the English first-task guide, Chinese plugin guide and both READMEs aligned.
 

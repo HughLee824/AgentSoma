@@ -6,7 +6,11 @@ Later on 8 September, website code and its two existing commits were extracted i
 
 Cloudflare Workers Static Assets now serves the public website at **[agentsoma.dev](https://agentsoma.dev)** and `www.agentsoma.dev`. The first production deployment used website commit `18e42e8f41445f9a8c3dd87630a0e9a49aa632bb` and Worker version `d09c9ea3-3bf5-4a6a-a1e5-a165e9e3edb3`. Both HTTPS homepages returned 200, an unknown path returned 404, and all 13 deployed static files matched the local build byte for byte. Browser checks on the new host verified loaded fonts and images, desktop and narrow layouts, client selection and copy feedback.
 
-The new repository owns its pinned Wrangler dependency, build checks and custom-domain configuration. The initial deployment succeeded through the official Wrangler CLI; the GitHub application is authorized for this website repository, with automatic build configuration still pending. The original public Sites URL remains available. The dated evidence below describes the original public-access delivery and is preserved as historical evidence.
+The new repository owns its pinned Wrangler dependency, build checks and custom-domain configuration. The initial deployment succeeded through the official Wrangler CLI. The GitHub application is authorized for this website repository, but automatic builds are not enabled: approval of Cloudflare's default build-token permissions is still pending. No build token was created. The original public Sites URL remains available.
+
+The main repository's entry links and plugin homepage now use `https://agentsoma.dev`. Plugin **0.1.3** was published in commit `7596e03cc1d940c254775b0c800f0c0ab654d82c`; [its complete CI run](https://github.com/HughLee824/AgentSoma/actions/runs/34220545790) passed. From outside the source checkout, both Codex and Claude Code upgraded from public 0.1.2 to 0.1.3 using the documented commands. All nine files in each installed package matched the published source, and both bundled preflight scripts passed. This patch updates homepage metadata and the workflow version; device operations remain deferred.
+
+The dated evidence below describes the original public-access delivery and is preserved as historical evidence.
 
 ## Original delivery
 
