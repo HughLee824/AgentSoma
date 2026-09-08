@@ -8,8 +8,7 @@ See the [8 September delivery and acceptance record](public-access-acceptance.md
 
 | Source | Purpose |
 | --- | --- |
-| `website/` | Static site source, local fonts and reviewed demo media. |
-| `website/.openai/hosting.json` | Sites project ID and static output directory. No credentials. |
+| Separate `agentsoma-website` repository | Static site source, reviewed demo media, website CI and Cloudflare deployment. |
 | `skills/agentsoma/` | Canonical shared operation rules, client adapters and preflight. |
 | `plugins/agentsoma/` | Self-contained dual-client distribution; committed copies checked by CI. |
 | `.agents/plugins/marketplace.json` | Codex repository marketplace. |
@@ -24,7 +23,6 @@ python3 -m unittest discover -s scripts/tests -v
 node --test scripts/tests/test_agent_templates.mjs
 python3 scripts/sync-plugin.py --check
 python3 scripts/sync-plugin.py --archive .build/plugins
-python3 website/build.py
 xcodebuild build-for-testing \
   -project Runner/AgentSomaRunner.xcodeproj -scheme AgentSomaRunner \
   -configuration Debug -sdk iphoneos -destination 'generic/platform=iOS' \
@@ -32,7 +30,7 @@ xcodebuild build-for-testing \
   CODE_SIGNING_ALLOWED=NO IPHONEOS_DEPLOYMENT_TARGET=17.0
 ```
 
-The CI workflow runs Swift/Python checks, the unsigned Runner build, Node templates, public installation/bundle/link checks and the website build on macOS. It uploads the static output and plugin ZIP/checksum for review. The release workflow applies the template and plugin checks to binary releases and attaches the plugin ZIP/checksum to its draft; downloaded plugin artifacts are compared with the exact source before creating the draft. Neither workflow has a physical iPhone or claims task acceptance.
+The CI workflow runs Swift/Python checks, the unsigned Runner build, Node templates and public installation/bundle checks on macOS. It uploads the plugin ZIP/checksum as `client-plugins` for review. Website build and link checks run independently on Ubuntu in the website repository. The release workflow applies the template and plugin checks to binary releases and attaches the plugin ZIP/checksum to its draft; downloaded plugin artifacts are compared with the exact source before creating the draft. Neither workflow has a physical iPhone or claims task acceptance.
 
 ## Publish a plugin change
 
@@ -47,16 +45,16 @@ Do not silently change content under a published version. For the initial releas
 
 ## Publish the website
 
-Use Sites with the existing project ID in `website/.openai/hosting.json`. The intended audience is **public**. Build `website/dist` from the validated source, preserving the exact source commit for the deployed version. Only the site source belongs in the Sites source repository; do not upload the parent Swift repository, `.local`, profiles or client logs. The Sites tooling stores short-lived credentials outside source files and Git configuration.
+Website source and release instructions live in the separate [agentsoma-website repository](https://github.com/HughLee824/agentsoma-website). It targets Cloudflare Workers Static Assets at `https://agentsoma.dev`; keep the existing public Sites entry until that deployment and domain have been verified. The repository's `wrangler.jsonc` declares the public output, real 404 handling and custom domains. Connect the repository to Cloudflare Workers Builds using its README to validate and deploy independently of CLI and plugin releases.
 
-Save and deploy the built static version through Sites, then verify the exact HTTPS URL without an authenticated session. Check installation anchors, client selection, clipboard success/failure, keyboard navigation, and narrow layouts (320, 375, 414 and 768 CSS pixels) as well as desktop. Update the existing site rather than creating a new one for fixes. The CI static artifact is a review/build artifact; uploading it does not deploy the live site.
+After deployment, verify the exact HTTPS URL without an authenticated session. Check installation anchors, client selection, clipboard success/failure, keyboard navigation, and narrow layouts (320, 375, 414 and 768 CSS pixels) as well as desktop. Keep the deployed website commit in the acceptance record. The website's GitHub Actions artifact is a review/build artifact; The configured Cloudflare Workers Builds connection will handle production deployment.
 
 After deployment, follow the website's two client paths using the public install source. Keep the website's installation text, the English first-task guide, Chinese plugin guide and both READMEs aligned.
 
 ## Evidence and rollback
 
-Record date, public site URL, repository commit, plugin version, CLI/client versions, Mac/Xcode/iPhone/iOS versions, signing type, installation source, image-reading/tool evidence, task result, rejection/recovery, upgrade pickup, cleanup, and remaining limitations. Store raw client logs and device captures in ignored `.local/public-access/`. Publish only a deliberately sanitized acceptance summary and reviewed media under `website/assets/`.
+Record date, public site URL, repository commit, plugin version, CLI/client versions, Mac/Xcode/iPhone/iOS versions, signing type, installation source, image-reading/tool evidence, task result, rejection/recovery, upgrade pickup, cleanup, and remaining limitations. Store raw client logs and device captures in ignored `.local/public-access/`. Publish only a deliberately sanitized acceptance summary and reviewed media under `assets/` in the website repository.
 
 If a public source or client task cannot be tested, state exactly what is blocked and leave that part unverified. A working Homebrew installation does not establish a fresh-Mac signing path. A successful local plugin install does not establish a public Git install. A build or deployment receipt does not establish two-client task success.
 
-To roll back website content, redeploy an earlier validated Sites version. For a plugin regression, publish a **new patch version** with the corrected or reverted content so client caches refresh. Keep active device sessions disconnected while changing CLI/Runner installations. Reverting a source file without a version bump is not a reliable plugin rollback.
+To roll back website content, revert the website commit and let Cloudflare deploy it, or restore an earlier validated Worker deployment. For a plugin regression, publish a **new patch version** with the corrected or reverted content so client caches refresh. Keep active device sessions disconnected while changing CLI/Runner installations. Reverting a source file without a version bump is not a reliable plugin rollback.

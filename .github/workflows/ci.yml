@@ -40,15 +40,12 @@ jobs:
         run: |
           python3 scripts/sync-plugin.py --check
           python3 scripts/sync-plugin.py --archive .build/plugins
-      - name: Build the static website
-        run: python3 website/build.py
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
-          name: public-access
+          name: client-plugins
           if-no-files-found: error
           retention-days: 7
           include-hidden-files: true # Explicit public paths below include .build/plugins.
           path: |
-            website/dist/
             .build/plugins/*.zip
             .build/plugins/*.zip.sha256

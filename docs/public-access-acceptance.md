@@ -1,5 +1,13 @@
 # Public access acceptance — 8 September 2026
 
+## Website repository split
+
+Later on 8 September, website code and its two existing commits were extracted into the independent `HughLee824/agentsoma-website` repository. The pre-existing empty private repository was reused with its visibility preserved. Website tests and build checks now run separately on Ubuntu; [the first website CI run](https://github.com/HughLee824/agentsoma-website/actions/runs/34215374385) passed for commit `2450df4dde28ab58289d29d87314f5ce52ed7848`.
+
+The new repository includes a pinned Wrangler dependency and custom-domain configuration for Cloudflare Workers Static Assets at `agentsoma.dev`. Cloudflare production deployment and domain cutover remain pending. The original public Sites URL remains active. The dated validation evidence below describes the original public-access delivery and is preserved as historical evidence.
+
+## Original delivery
+
 The [public website](https://agentsoma.hughlee824.chatgpt.site), client marketplaces, installation guides and build checks are delivered. **The two-client physical iPhone task remains pending:** the device was unavailable and the user requested completing the remaining deliverables first.
 
 ## Published scope
