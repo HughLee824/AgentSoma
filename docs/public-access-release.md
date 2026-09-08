@@ -2,6 +2,8 @@
 
 The public entry point is [the AgentSoma website](https://agentsoma.hughlee824.chatgpt.site). Its install flow uses the existing public Homebrew Tap and this repository's two Git marketplaces. The website is static; the plugin packages a skill, not an MCP service.
 
+See the [8 September delivery and acceptance record](public-access-acceptance.md) for verified installation, upgrade and build evidence, plus the deferred device tests.
+
 ## Source ownership
 
 | Source | Purpose |

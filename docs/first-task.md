@@ -110,6 +110,7 @@ Command tools may return a background job ID. That ID differs from AgentSoma's d
 | --- | --- |
 | `agentsoma: command not found` in the client | Verify the Terminal installation, check the client's PATH, and restart the client. The plugin does not contain the executable. |
 | Client cannot parse its own configuration | Resolve the CLI/app version or configuration mismatch first; this error occurs before plugin loading. Do not replace your full configuration with a sample. |
+| Codex says the selected model requires a newer CLI | Update Codex using its original installation method, or select a model supported by the installed CLI. This is a client/model compatibility error before the device task. |
 | Plugin installs but the skill is absent | Confirm the plugin is enabled, use the namespaced invocation, and start a new session. For updates, refresh the marketplace **and** installed plugin. |
 | `setup_required` / `setup_update_required` | Run the indicated `setup --device ID` with the release CLI, then connect again. |
 | `profile_not_found` or a signing mismatch | Prepare the matching development profile or pass the correct `--profile`, `--team`, `--bundle-id`, or `--identity`. See [signing errors](onboarding.md#常见接入错误). |
