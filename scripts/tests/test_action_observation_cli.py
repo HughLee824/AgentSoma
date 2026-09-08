@@ -70,7 +70,7 @@ class ActionObservationCLITests(unittest.TestCase):
                      ["press", "o1:e8", "--key", "return"]]:
             with self.subTest(command=args[0]):
                 code, response, requests = self.run_cli([*args, "--observe"])
-                self.assertEqual(code, 0)
+                self.assertEqual(code, 0, response)
                 self.assertTrue(response["ok"])
                 self.assertEqual(response["action"]["result"]["inputFact"], "preserved")
                 self.assertEqual(response["observation"]["result"]["screenshot"], "/fixture/o2.png")
@@ -80,7 +80,7 @@ class ActionObservationCLITests(unittest.TestCase):
 
     def test_without_flag_preserves_original_response(self):
         code, response, requests = self.run_cli(["tap", "o1:e11"])
-        self.assertEqual(code, 0)
+        self.assertEqual(code, 0, response)
         self.assertEqual(response["outcome"], "completed")
         self.assertNotIn("action", response)
         self.assertEqual(len(requests), 1)
