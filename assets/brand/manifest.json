@@ -1,0 +1,183 @@
+{
+  "brand": "AgentSoma",
+  "direction": "Soma — embodied S",
+  "date": "2026-09-08",
+  "formats": [
+    "SVG",
+    "PNG",
+    "ICO"
+  ],
+  "provenance": {
+    "raster": "Existing selected logo exports preserved byte for byte; original symbol generated with ImageGen and refined once.",
+    "svg": "Converted and supplied by the project owner; preserved unchanged. Existing raster exports were not regenerated from this SVG.",
+    "wordmark": {
+      "font": "Geist Mono",
+      "weight": 600,
+      "license": "licenses/geist-mono-OFL.txt"
+    }
+  },
+  "files": [
+    {
+      "path": "agent-soma.svg",
+      "bytes": 2989,
+      "sha256": "c2ee7036cdb6811cb627b9d4b0a1ee6695bb1e8d59392281f9bf2db892c706e7",
+      "format": "SVG",
+      "viewBox": [
+        0.0,
+        0.0,
+        1254.0,
+        1254.0
+      ],
+      "source": "Project-owner conversion; supplied SVG preserved unchanged"
+    },
+    {
+      "path": "soma-mark.png",
+      "bytes": 88744,
+      "sha256": "08e57b16d992709ab4b618aaf6aa5e21a42e1a8ff16a2086b944bc545bd9a212",
+      "format": "PNG",
+      "dimensions": [
+        1024,
+        1024
+      ],
+      "mode": "RGBA"
+    },
+    {
+      "path": "soma-mark-256.png",
+      "bytes": 7298,
+      "sha256": "05403a240fa0b125d6f6f2e273e5c52b8149f975da3740f83057195b8e7fc22c",
+      "format": "PNG",
+      "dimensions": [
+        256,
+        256
+      ],
+      "mode": "RGBA"
+    },
+    {
+      "path": "soma-github-icon.png",
+      "bytes": 98115,
+      "sha256": "31b8dd5f18dd62a92aa5da507c00530edd5a81166470f5d6308fc3e0803d9fbc",
+      "format": "PNG",
+      "dimensions": [
+        1024,
+        1024
+      ],
+      "mode": "RGB"
+    },
+    {
+      "path": "agentsoma-wordmark.png",
+      "bytes": 18993,
+      "sha256": "0765c7674bcbabec17edcf4c94bc5f725d7683cdd914757fcad3a626c3fccf75",
+      "format": "PNG",
+      "dimensions": [
+        960,
+        210
+      ],
+      "mode": "RGBA"
+    },
+    {
+      "path": "agentsoma-lockup.png",
+      "bytes": 23434,
+      "sha256": "067ef216cb14cc377a671c9bdba78432e5b0b03e57728b8619c1f6b894e1c73e",
+      "format": "PNG",
+      "dimensions": [
+        1200,
+        240
+      ],
+      "mode": "RGBA"
+    },
+    {
+      "path": "agentsoma-readme.png",
+      "bytes": 30063,
+      "sha256": "34b3e9127b8324e071052f08ecc2f5de57ffce897e895e83372db098871413fb",
+      "format": "PNG",
+      "dimensions": [
+        1200,
+        300
+      ],
+      "mode": "RGB"
+    },
+    {
+      "path": "favicon-16.png",
+      "bytes": 408,
+      "sha256": "b08111b9135decf40fe9ce8b80b169973ae57d7129aa1c30f0154cf323fd759c",
+      "format": "PNG",
+      "dimensions": [
+        16,
+        16
+      ],
+      "mode": "RGB"
+    },
+    {
+      "path": "favicon-32.png",
+      "bytes": 900,
+      "sha256": "53434575449002062775af25a1c3724bd2cf7071a106c41473e3cf0d60766b8a",
+      "format": "PNG",
+      "dimensions": [
+        32,
+        32
+      ],
+      "mode": "RGB"
+    },
+    {
+      "path": "favicon-48.png",
+      "bytes": 1397,
+      "sha256": "0231829b0e0c064de70daf5836ffb4d6a5751e0528a0f7f9fcc8d1bdbded011a",
+      "format": "PNG",
+      "dimensions": [
+        48,
+        48
+      ],
+      "mode": "RGB"
+    },
+    {
+      "path": "favicon-64.png",
+      "bytes": 1858,
+      "sha256": "6a2d434e28aeb3705e5e45c9694f54e8459e94244429517f468ea86294aa2734",
+      "format": "PNG",
+      "dimensions": [
+        64,
+        64
+      ],
+      "mode": "RGB"
+    },
+    {
+      "path": "favicon.ico",
+      "bytes": 16733,
+      "sha256": "6f45b7a93663b80c5720c173e41cc24fd860a4085774388f5fc8449c0782c247",
+      "format": "ICO",
+      "dimensions": [
+        256,
+        256
+      ],
+      "mode": "RGB",
+      "embedded_sizes": [
+        [
+          16,
+          16
+        ],
+        [
+          32,
+          32
+        ],
+        [
+          48,
+          48
+        ],
+        [
+          64,
+          64
+        ],
+        [
+          256,
+          256
+        ]
+      ]
+    },
+    {
+      "path": "licenses/geist-mono-OFL.txt",
+      "bytes": 4387,
+      "sha256": "f12f59163d92084b0473315ae4566cde0c1233d940ae464f5225a69c347cc691",
+      "format": "text"
+    }
+  ]
+}

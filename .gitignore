@@ -10,6 +10,9 @@
 __pycache__/
 *.py[cod]
 
+# Local design drafts, previews, and export archives; final brand assets live in assets/brand.
+/output/
+
 # Machine-specific settings and diagnostics
 .DS_Store
 xcuserdata/
