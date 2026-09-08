@@ -178,6 +178,21 @@
       "bytes": 4387,
       "sha256": "f12f59163d92084b0473315ae4566cde0c1233d940ae464f5225a69c347cc691",
       "format": "text"
+    },
+    {
+      "path": "agentsoma-wordmark-dark.svg",
+      "bytes": 26029,
+      "sha256": "05cbd142d39f779f9d98cafe635713da6862e823a079c89ed072a2e640234853",
+      "format": "SVG",
+      "viewBox": [
+        0,
+        0,
+        960,
+        210
+      ],
+      "source": "agentsoma-wordmark.png",
+      "source_sha256": "0765c7674bcbabec17edcf4c94bc5f725d7683cdd914757fcad3a626c3fccf75",
+      "rendering": "Self-contained SVG embedding the original PNG; maps RGB to #f0f6fc while preserving alpha. Not a vector tracing."
     }
   ]
 }

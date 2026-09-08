@@ -1,4 +1,9 @@
-# AgentSoma
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/brand/agentsoma-wordmark-dark.svg">
+    <img src="assets/brand/agentsoma-wordmark.png" alt="AgentSoma" width="420">
+  </picture>
+</h1>
 
 **Eyes and hands for AI agents operating a real iPhone.**
 

@@ -1,4 +1,9 @@
-# AgentSoma
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/brand/agentsoma-wordmark-dark.svg">
+    <img src="assets/brand/agentsoma-wordmark.png" alt="AgentSoma" width="420">
+  </picture>
+</h1>
 
 **为操作真实 iPhone 的 AI agent 提供眼睛和手。**
 
