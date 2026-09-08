@@ -1,6 +1,6 @@
 # Your first iPhone task
 
-Start at the [AgentSoma website](https://agentsoma.rich-spool-5142.chatgpt.site). This guide follows the public **Homebrew → client plugin → device setup → first task** path. It works outside the AgentSoma source checkout.
+Start at the [AgentSoma website](https://agentsoma.hughlee824.chatgpt.site). This guide follows the public **Homebrew → client plugin → device setup → first task** path. It works outside the AgentSoma source checkout.
 
 [中文安装](install.md) · [中文插件指南](plugins.md) · [Troubleshooting](#when-something-stops)
 

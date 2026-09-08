@@ -12,7 +12,7 @@ AgentSoma 是一个 macOS CLI，让外部 agent 能够发现 App、读取截图�
 
 调用 agent 需要具备本机命令执行和 PNG 读图能力。设备控制链路在你的 Mac 和 iPhone 上本地运行。
 
-[网站](https://agentsoma.rich-spool-5142.chatgpt.site) · [首个 iPhone 任务](docs/first-task.md) · [客户端插件](docs/plugins.md) · [命令概览](#命令概览) · [文档导航](#文档导航)
+[网站](https://agentsoma.hughlee824.chatgpt.site) · [首个 iPhone 任务](docs/first-task.md) · [客户端插件](docs/plugins.md) · [命令概览](#命令概览) · [文档导航](#文档导航)
 
 ## 为什么选择 AgentSoma？
 

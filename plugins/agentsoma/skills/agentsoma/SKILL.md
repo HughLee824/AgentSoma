@@ -9,7 +9,7 @@ Use the local `agentsoma` CLI for iPhone observation and input. The calling agen
 
 ## Check the installation
 
-Workflow version: **0.1.1**. The public package path requires **AgentSoma CLI 0.1.0 or later**. The plugin contains instructions, not the CLI or a signed Runner.
+Workflow version: **0.1.2**. The public package path requires **AgentSoma CLI 0.1.0 or later**. The plugin contains instructions, not the CLI or a signed Runner.
 
 Before the first device command in a new task, run `sh scripts/preflight.sh` using the absolute path resolved relative to **this SKILL.md**, not the user's working directory. This read-only check verifies CLI version and full Xcode, and reports whether action `--observe` is available. If the CLI is missing, follow the [first-task guide](https://github.com/HughLee824/AgentSoma/blob/main/docs/first-task.md): `brew install HughLee824/tap/agentsoma`. Restart the client after PATH changes. Device trust, Developer Mode, and signing still need setup; the check does not prove a phone is ready.
 

@@ -59,6 +59,7 @@ jobs:
           name: release-assets
           if-no-files-found: error
           retention-days: 7
+          include-hidden-files: true # Only the validated release files listed below.
           path: |
             .build/releases/*.tar.gz
             .build/releases/*.tar.gz.sha256

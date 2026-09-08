@@ -1,6 +1,6 @@
 # Public access release
 
-The public entry point is [the AgentSoma website](https://agentsoma.rich-spool-5142.chatgpt.site). Its install flow uses the existing public Homebrew Tap and this repository's two Git marketplaces. The website is static; the plugin packages a skill, not an MCP service.
+The public entry point is [the AgentSoma website](https://agentsoma.hughlee824.chatgpt.site). Its install flow uses the existing public Homebrew Tap and this repository's two Git marketplaces. The website is static; the plugin packages a skill, not an MCP service.
 
 ## Source ownership
 

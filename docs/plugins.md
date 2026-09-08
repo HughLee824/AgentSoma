@@ -1,6 +1,6 @@
 # Codex / Claude Code 插件
 
-[公开网站](https://agentsoma.rich-spool-5142.chatgpt.site) → [安装 CLI](install.md) → 安装本页插件 → [设备 setup](onboarding.md#发布包-setup) → 首个真机任务。完整英文路径见 [First task](first-task.md)。
+[公开网站](https://agentsoma.hughlee824.chatgpt.site) → [安装 CLI](install.md) → 安装本页插件 → [设备 setup](onboarding.md#发布包-setup) → 首个真机任务。完整英文路径见 [First task](first-task.md)。
 
 插件是 **CLI + skill** 封装，共用设备操作契约，分别适配 Codex 的命令执行、后台续读和图片工具，以及 Claude Code 的 Bash、TaskOutput 和 Read。它不含 CLI、不创建开发签名、不自动接入手机，也不要求 MCP 服务。
 

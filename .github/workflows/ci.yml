@@ -47,6 +47,7 @@ jobs:
           name: public-access
           if-no-files-found: error
           retention-days: 7
+          include-hidden-files: true # Explicit public paths below include .build/plugins.
           path: |
             website/dist/
             .build/plugins/*.zip

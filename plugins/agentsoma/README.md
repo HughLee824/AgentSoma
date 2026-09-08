@@ -2,7 +2,7 @@
 
 Eyes and hands for agents operating a real iPhone. This self-contained package supports **Codex** and **Claude Code** through one skill and two client adapters. It requires AgentSoma CLI **0.1.0+**, full Xcode on a Mac, and local Apple development signing for your connected iPhone.
 
-[Website](https://agentsoma.rich-spool-5142.chatgpt.site) · [First task](https://github.com/HughLee824/AgentSoma/blob/main/docs/first-task.md) · [中文安装指南](https://github.com/HughLee824/AgentSoma/blob/main/docs/plugins.md)
+[Website](https://agentsoma.hughlee824.chatgpt.site) · [First task](https://github.com/HughLee824/AgentSoma/blob/main/docs/first-task.md) · [中文安装指南](https://github.com/HughLee824/AgentSoma/blob/main/docs/plugins.md)
 
 Install the CLI with `brew install HughLee824/tap/agentsoma`. Installing this plugin does not install the CLI, log in to Apple, or provision a device. Read `skills/agentsoma/SKILL.md` for the environment check and task workflow. All referenced local files are included; the installed plugin does not depend on the maintainer's checkout.
 
