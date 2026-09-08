@@ -1,12 +1,12 @@
 {
   "name": "agentsoma",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Observe and operate a connected physical iPhone with the AgentSoma CLI.",
   "author": {
     "name": "AgentSoma contributors",
     "url": "https://github.com/HughLee824/AgentSoma"
   },
-  "homepage": "https://agentsoma.hughlee824.chatgpt.site",
+  "homepage": "https://agentsoma.dev",
   "repository": "https://github.com/HughLee824/AgentSoma",
   "license": "MIT",
   "keywords": ["iphone", "ios", "automation", "xctest"],

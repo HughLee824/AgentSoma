@@ -12,7 +12,7 @@ AgentSoma is a macOS CLI that lets an external agent discover apps, read screens
 
 An agent needs local command execution and the ability to read PNG files. The device control path runs locally on your Mac and iPhone.
 
-[Website](https://agentsoma.hughlee824.chatgpt.site) · [First iPhone task](docs/first-task.md) · [Client plugins](docs/plugins.md) · [Commands](#commands) · [Documentation](#documentation)
+[Website](https://agentsoma.dev) · [First iPhone task](docs/first-task.md) · [Client plugins](docs/plugins.md) · [Commands](#commands) · [Documentation](#documentation)
 
 ## Why AgentSoma?
 

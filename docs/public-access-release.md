@@ -1,6 +1,6 @@
 # Public access release
 
-The public entry point is [the AgentSoma website](https://agentsoma.hughlee824.chatgpt.site). Its install flow uses the existing public Homebrew Tap and this repository's two Git marketplaces. The website is static; the plugin packages a skill, not an MCP service.
+The public entry point is [the AgentSoma website](https://agentsoma.dev). Its install flow uses the existing public Homebrew Tap and this repository's two Git marketplaces. The website is static; the plugin packages a skill, not an MCP service.
 
 See the [8 September delivery and acceptance record](public-access-acceptance.md) for verified installation, upgrade and build evidence, plus the deferred device tests.
 
@@ -45,7 +45,7 @@ Do not silently change content under a published version. For the initial releas
 
 ## Publish the website
 
-Website source and release instructions live in the separate [agentsoma-website repository](https://github.com/HughLee824/agentsoma-website). It targets Cloudflare Workers Static Assets at `https://agentsoma.dev`; keep the existing public Sites entry until that deployment and domain have been verified. The repository's `wrangler.jsonc` declares the public output, real 404 handling and custom domains. Connect the repository to Cloudflare Workers Builds using its README to validate and deploy independently of CLI and plugin releases.
+Website source and release instructions live in the separate [agentsoma-website repository](https://github.com/HughLee824/agentsoma-website). Its Cloudflare Worker serves the verified public site at `https://agentsoma.dev`. The repository's `wrangler.jsonc` declares the public output, real 404 handling and custom domains. Connect the repository to Cloudflare Workers Builds using its README to validate and deploy independently of CLI and plugin releases.
 
 After deployment, verify the exact HTTPS URL without an authenticated session. Check installation anchors, client selection, clipboard success/failure, keyboard navigation, and narrow layouts (320, 375, 414 and 768 CSS pixels) as well as desktop. Keep the deployed website commit in the acceptance record. The website's GitHub Actions artifact is a review/build artifact; The configured Cloudflare Workers Builds connection will handle production deployment.
 

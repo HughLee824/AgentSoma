@@ -2,7 +2,7 @@
 
 AgentSoma 为外部 agent 提供真实 iPhone 的观察和操作能力。本包包含 macOS CLI 和配套预编译 iOS Runner；setup 在本机重签，不编译源码。
 
-从[公开网站](https://agentsoma.hughlee824.chatgpt.site)进入的新用户，安装 CLI 后继续[客户端插件](https://github.com/HughLee824/AgentSoma/blob/main/docs/plugins.md)和[首个真机任务](https://github.com/HughLee824/AgentSoma/blob/main/docs/first-task.md)。插件安装与签名 setup 是两个步骤。
+从[公开网站](https://agentsoma.dev)进入的新用户，安装 CLI 后继续[客户端插件](https://github.com/HughLee824/AgentSoma/blob/main/docs/plugins.md)和[首个真机任务](https://github.com/HughLee824/AgentSoma/blob/main/docs/first-task.md)。插件安装与签名 setup 是两个步骤。
 
 ## 前置条件
 

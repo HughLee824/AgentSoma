@@ -4,7 +4,9 @@
 
 Later on 8 September, website code and its two existing commits were extracted into the independent `HughLee824/agentsoma-website` repository. The pre-existing empty private repository was reused with its visibility preserved. Website tests and build checks now run separately on Ubuntu; [the first website CI run](https://github.com/HughLee824/agentsoma-website/actions/runs/34215374385) passed for commit `2450df4dde28ab58289d29d87314f5ce52ed7848`.
 
-The new repository includes a pinned Wrangler dependency and custom-domain configuration for Cloudflare Workers Static Assets at `agentsoma.dev`. Cloudflare production deployment and domain cutover remain pending. The original public Sites URL remains active. The dated validation evidence below describes the original public-access delivery and is preserved as historical evidence.
+Cloudflare Workers Static Assets now serves the public website at **[agentsoma.dev](https://agentsoma.dev)** and `www.agentsoma.dev`. The first production deployment used website commit `18e42e8f41445f9a8c3dd87630a0e9a49aa632bb` and Worker version `d09c9ea3-3bf5-4a6a-a1e5-a165e9e3edb3`. Both HTTPS homepages returned 200, an unknown path returned 404, and all 13 deployed static files matched the local build byte for byte. Browser checks on the new host verified loaded fonts and images, desktop and narrow layouts, client selection and copy feedback.
+
+The new repository owns its pinned Wrangler dependency, build checks and custom-domain configuration. The initial deployment succeeded through the official Wrangler CLI; the GitHub application is authorized for this website repository, with automatic build configuration still pending. The original public Sites URL remains available. The dated evidence below describes the original public-access delivery and is preserved as historical evidence.
 
 ## Original delivery
 
