@@ -62,7 +62,7 @@ def package_runner(products, destination):
             run(["/usr/bin/codesign", "--remove-signature", str(bundle / executable)], cwd=destination)
         run(["/usr/bin/strip", "-S", str(bundle / executable)], cwd=destination)
     info = plistlib.loads((app / "Info.plist").read_bytes())
-    info["CFBundleDisplayName"] = "AgentSoma Runner"
+    info["CFBundleDisplayName"] = "AgentSoma"
     write_plist(app / "Info.plist", info)
     # Generate a closed, portable test manifest instead of shipping local build settings.
     write_plist(destination / "Runner.xctestrun", {
