@@ -49,7 +49,7 @@ AgentSoma 仍是 macOS CLI。Mac Developer ID 签名、公证是下载渠道与�
 
 ## GitHub Releases 与 Homebrew Tap
 
-首次分发只生成已验证的 `macos-arm64` 安装包。工作流使用 GitHub 的 `macos-15` ARM64 runner 和 Xcode 16.0；Intel 发布不在当前矩阵内。构建不需要维护者的 Apple 签名证书、profile 或 iPhone。
+首次分发只生成已验证的 `macos-arm64` 安装包。CI 和发布工作流使用 GitHub 的 `macos-15` ARM64 runner 和 Xcode 16.4，与镜像预装的 iOS 18.5 simulator runtime 配套；即使构建真机产物，App Icon 的资源编译也需要兼容的 simulator runtime。Intel 发布不在当前矩阵内。构建不需要维护者的 Apple 签名证书、profile 或 iPhone。
 
 发布采用 **云端生成草稿 → 本地 Mac + iPhone 验收 → 发布同一安装包 → 更新 Homebrew → 验证公共安装入口**。
 

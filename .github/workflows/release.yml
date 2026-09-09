@@ -22,7 +22,8 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 30
     env:
-      DEVELOPER_DIR: /Applications/Xcode_16.app/Contents/Developer
+      # Keep aligned with CI and the hosted image's iOS 18.5 simulator runtime.
+      DEVELOPER_DIR: /Applications/Xcode_16.4.app/Contents/Developer
       VERSION: ${{ inputs.version }}
       HOMEBREW_NO_AUTO_UPDATE: '1'
       HOMEBREW_NO_INSTALL_CLEANUP: '1'
