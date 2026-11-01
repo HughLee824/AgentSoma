@@ -179,10 +179,18 @@ extension NativePreviewPage {
         radial-gradient(ellipse 16% 32% at 61% 57%,#202957b3,transparent 90%),\
         radial-gradient(circle,#05080e 0%,#080b16 24%,#1b1c2c 28%,#10111d 37%,#11121b 40%,#0d0e15 69%)\
         ;transform:translate(-50%,-50%) rotate(32deg);box-shadow:0 0 .4em .3em #080a10}
-        .device-hardware[data-duo="inner"] .hinge-cap{display:block;top:50%;height:20em;width:7em\
-        ;transform:translateY(-50%);border-radius:2em;border:.6em solid #18212e\
-        ;background:linear-gradient(90deg,#263548,#8193a9 40%,#1b2634)}
-        .hinge-cap.first{left:0}.hinge-cap.second{right:0}
+        /* Recessed inner hinge bridges. Local portrait coordinates rotate with the shell. */
+        .device-hardware[data-duo="inner"] .hinge-cap{display:block;top:50%;height:38em;width:6em\
+        ;transform:translateY(-50%);border-radius:1.3em;border:.5em solid #101214\
+        ;background:linear-gradient(90deg,#292b2d,#1b1d1f 35%,#151719 85%,#0b0d0f)\
+        ;box-shadow:inset 0 .8em .6em #45474980,inset 0 -.8em .6em #060809,inset .5em 0 .5em #393b3d}
+        .hinge-cap.first{left:4em}.hinge-cap.second{right:4em}
+        .device-hardware[data-duo="inner"] .hinge-cap.second{transform:translateY(-50%) rotate(180deg)}
+        .device-hardware[data-duo="inner"] .hinge-cap::before{content:"";position:absolute;left:-4.7em\
+        ;top:50%;width:2.5em;height:3em;transform:translateY(-50%);border-radius:0 1.5em 1.5em 0\
+        ;background:#05080c;box-shadow:inset 0 .4em .3em #7b8da5,inset 0 -.4em .3em #7b8da5}
+        .device-hardware[data-duo="inner"] .hinge-cap::after{content:"";position:absolute;inset:1em .7em\
+        ;border-top:.8em solid #343638;border-bottom:.8em solid #343638;border-radius:.5em}
         #placeholder{z-index:2;position:absolute;background:#10151e}
         #device[data-ready="true"] #placeholder{display:none}
         #diagnostics{padding:18px 28px;background:var(--bg);color:var(--secondary);font:12px ui-monospace\
