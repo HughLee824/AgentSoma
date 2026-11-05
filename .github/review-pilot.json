@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "mode": "advisory",
+  "provider": {
+    "id": "codex",
+    "adapter": "codex-summary-v1",
+    "login": "chatgpt-codex-connector[bot]",
+    "user_id": 199175422
+  },
+  "policy_files": ["AGENTS.md", "REVIEW.md", "docs/code-review.md"]
+}

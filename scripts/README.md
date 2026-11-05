@@ -5,6 +5,7 @@ Run `python3 scripts/check.py` from the repository root for the shared device-fr
 | Directory | Responsibility |
 | --- | --- |
 | `checks/` | Documentation links and PR title policy. |
+| [review/](review/README.md) | Read-only, non-blocking observation of a replaceable GitHub AI reviewer. |
 | `tools/` | Checksum-pinned Actionlint and SwiftLint installers and version pins. |
 | `release/` | CLI/Runner archives, integrity verification and Homebrew formula generation. |
 | `plugin/` | Plugin/skill synchronization, package construction, versions and publication verification. |
