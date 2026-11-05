@@ -16,6 +16,8 @@ Keep the required GitHub Actions status context **`test`**. It is an always-run 
 
 The quick job runs on Linux and native checks run on the Xcode macOS image. The default local `python3 scripts/check.py` runs both groups. Draft releases also use the full entry point; publication workflows require successful push CI for the exact `main` commit. A local pass does not establish a cloud workflow run.
 
+The separate [review pilot](../scripts/review/README.md) observes the configured AI reviewer. Keep `Review pilot (advisory)` outside required checks and outside the `test` dependency list. A green observation job means the collector ran, not that AI approved the change. Existing conversation-resolution rules still apply. Provider setup and review triggers are external settings; verify them for each new repository. Missing or outdated review evidence is visible without adding a pilot merge gate.
+
 ## Release and reporting settings
 
 - Enable GitHub private vulnerability reporting, which provides the route linked from [SECURITY.md](../SECURITY.md).

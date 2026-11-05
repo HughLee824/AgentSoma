@@ -52,6 +52,8 @@ feat(cli)!: require explicit session selection
 
 The PR description should explain the concrete problem, resulting behavior, verification and remaining limitations. The template provides these prompts. Resolve review conversations and pass required checks before merging. The single-maintainer workflow does not require an impossible self-approval; obtain independent review when another maintainer is available, especially for signing, release and input-safety changes.
 
+Use [REVIEW.md](REVIEW.md) and the [review procedure](docs/code-review.md) to classify risk, substantiate findings and bound re-review. Record the tested revision, missing coverage, finding dispositions and how to undo the change. A human maintainer owns risk acceptance and merging; a clean AI review is not human approval or physical-device acceptance.
+
 ## Source ownership and generated files
 
 Edit `skills/iphone-use/`, then run `python3 scripts/plugin/sync-plugin.py`. Do not edit its generated copy in `plugins/iphone-use/skills/` or the generated repository package manifest directly. Plugin-specific manifests and adapters remain in `plugins/iphone-use/`; the portable installer remains in `packages/iphone-use-skill/`.

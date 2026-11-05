@@ -35,6 +35,7 @@ Start with [CONTRIBUTING.md](../CONTRIBUTING.md) for Git, PR and validation rule
 | --- | --- |
 | [Architecture](architecture.md) · [Native backend](apple-native-backend.md) | Module boundaries, Apple runtime adapters and failure semantics. |
 | [Testing](testing.md) | Shared checks, physical acceptance, evidence handling and current validation scope. |
+| [Code review](code-review.md) · [Repository rules](../REVIEW.md) | Evidence-based review, risk, bounded re-review and a reusable new-project template. |
 | [Release packaging](release-setup.md) | CLI/Runner builds, signing, archive validation and publication. |
 | [Plugin and website releases](public-access-release.md) · [Portable skill releases](skill-release.md) | Source ownership and channel-specific publication. |
 | [Preview calibration](preview-hardware-calibration.md) | Hardware geometry references; artwork licensing is in [assets/preview](../assets/preview/README.md). |

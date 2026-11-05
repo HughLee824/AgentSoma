@@ -79,7 +79,7 @@ def quick_checks():
     run([actionlint, "-shellcheck=", "-pyflakes=", *workflows])
     run([sys.executable, "scripts/checks/check-docs.py"])
     for pattern in ("test_docs.py", "test_governance.py", "test_engineering_checks.py", "test_brand.py",
-                    "test_artifact_transfer.py"):
+                    "test_artifact_transfer.py", "test_review_pilot.py"):
         run([sys.executable, "-m", "unittest", "discover", "-s", "scripts/tests", "-p", pattern, "-v"])
     node_tests = sorted(str(path.relative_to(ROOT)) for path in (ROOT / "scripts/tests").glob("test_*.mjs"))
     run(["node", "--test", *node_tests])
