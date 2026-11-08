@@ -28,7 +28,7 @@
         144,
         144
       ],
-      "note": "Same approved path; tighter framing only."
+      "note": "Same approved path; transparent background and cutouts. SVG adapts to light/dark; PNG/ICO use dark ink."
     }
   },
   "app_icon": {
@@ -141,59 +141,72 @@
       "mode": "RGB"
     },
     {
+      "path": "favicon.svg",
+      "bytes": 1379,
+      "sha256": "d4c09b9b686bef89137e386f552871a44af372b8b32cff50daa3e6bcb4ea598c",
+      "format": "SVG",
+      "viewBox": [
+        8,
+        8,
+        144,
+        144
+      ],
+      "appearance": "light/dark"
+    },
+    {
       "path": "favicon-16.png",
-      "bytes": 251,
-      "sha256": "457eb05e23c4b21b0d8c2b65b8cb20df542e0a0f94a4e5256ea4ae962539c490",
+      "bytes": 263,
+      "sha256": "11a68b11126da23679f34fb86cc8a5b51bf887aed071542a512e1afe3ce01528",
       "format": "PNG",
       "dimensions": [
         16,
         16
       ],
-      "mode": "RGB"
+      "mode": "RGBA"
     },
     {
       "path": "favicon-32.png",
-      "bytes": 464,
-      "sha256": "392dabbf91221767ef1d61b1bacd0764355fa399c347c9440e003800b487de6f",
+      "bytes": 443,
+      "sha256": "a4e695f421a3cbc55e452b6690307d37febce835f04325c1f50014d373f0026c",
       "format": "PNG",
       "dimensions": [
         32,
         32
       ],
-      "mode": "RGB"
+      "mode": "RGBA"
     },
     {
       "path": "favicon-48.png",
-      "bytes": 649,
-      "sha256": "189aff993b020e0ffb70bfdabfabf88056ff68c6265b138a8f31330c7182c051",
+      "bytes": 659,
+      "sha256": "94cfa4f9cefb9334f117730a1d0932696a413c67860b90adf7a23f101949efbc",
       "format": "PNG",
       "dimensions": [
         48,
         48
       ],
-      "mode": "RGB"
+      "mode": "RGBA"
     },
     {
       "path": "favicon-64.png",
-      "bytes": 885,
-      "sha256": "d3e5cf5dcedab1f6bb16984978c2478a697fd388e50fb70f6f9373a6cbdaa466",
+      "bytes": 815,
+      "sha256": "2e694d4689c601737fe2eee254b5ee41853bcb54875e8c357fbb96ba6c52bf12",
       "format": "PNG",
       "dimensions": [
         64,
         64
       ],
-      "mode": "RGB"
+      "mode": "RGBA"
     },
     {
       "path": "favicon.ico",
-      "bytes": 6791,
-      "sha256": "159c5af99201b83fd3406848de396a1fe7ca9bb879ace1de2e3a983f67966cd3",
+      "bytes": 6511,
+      "sha256": "401400462bfc966e0d6b6947f7234604813e132164e1e0f12981273ba41b38d3",
       "format": "ICO",
       "dimensions": [
         256,
         256
       ],
-      "mode": "RGB",
+      "mode": "RGBA",
       "embedded_sizes": [
         [
           16,
