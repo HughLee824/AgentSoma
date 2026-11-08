@@ -84,7 +84,7 @@ async function main() {
   await save('licenses/geist-OFL.txt', await fs.readFile(path.join(source, 'reference/geist-OFL.txt')),
     {format: 'text'});
   const manifest = {
-    brand: 'iphone-use', direction: 'Phone silhouette + continuous swipe', date: '2026-10-11',
+    brand: 'iphone-use', direction: 'Continuous-corner phone + continuous swipe', date: '2026-11-08',
     formats: ['SVG', 'PNG', 'ICO'],
     provenance: {
       approved_design: 'iphone-use-final/',
