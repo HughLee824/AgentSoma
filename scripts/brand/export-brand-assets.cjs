@@ -69,15 +69,22 @@ async function main() {
   // unchanged, with 10 units of top/bottom clear space (master: 18 units).
   const faviconSVG = mark.toString().replace('viewBox="0 0 160 160"', 'viewBox="8 8 144 144"');
   if (faviconSVG === mark.toString()) throw new Error('Unexpected master viewBox');
+  const colors = JSON.parse(await fs.readFile(path.join(source, 'geometry.json'), 'utf8'));
+  // Keep the mark and both cutouts transparent; adapt only the foreground color.
+  const adaptiveSVG = faviconSVG.replace('><path',
+    `><style>path{fill:${colors.ink}}@media(prefers-color-scheme:dark){path{fill:${colors.inverse}}}</style><path`);
+  if (adaptiveSVG === faviconSVG) throw new Error('Unexpected master path');
+  await save('favicon.svg', Buffer.from(adaptiveSVG),
+    {format: 'SVG', viewBox: [8, 8, 144, 144], appearance: 'light/dark'});
   const icons = [];
   for (const size of [16, 32, 48, 64, 256]) {
-    const data = await png(Buffer.from(faviconSVG), size, true);
+    const data = await png(Buffer.from(faviconSVG), size);
     icons.push({size, data});
     if (size !== 256) await save(`favicon-${size}.png`, data,
-      {format: 'PNG', dimensions: [size, size], mode: 'RGB'});
+      {format: 'PNG', dimensions: [size, size], mode: 'RGBA'});
   }
   await save('favicon.ico', ico(icons), {
-    format: 'ICO', dimensions: [256, 256], mode: 'RGB',
+    format: 'ICO', dimensions: [256, 256], mode: 'RGBA',
     embedded_sizes: icons.map(({size}) => [size, size]),
   });
   await fs.mkdir(path.join(brand, 'licenses'), {recursive: true});
@@ -91,7 +98,7 @@ async function main() {
       generator: 'scripts/brand/export-brand-assets.cjs',
       rasterizer: {sharp: sharp.versions.sharp, librsvg: sharp.versions.rsvg, density: 288},
       wordmark: {font: 'Geist', weight: 500, license: 'licenses/geist-OFL.txt', outlines: true},
-      favicon: {viewBox: [8, 8, 144, 144], note: 'Same approved path; tighter framing only.'},
+      favicon: {viewBox: [8, 8, 144, 144], note: 'Same approved path; transparent background and cutouts. SVG adapts to light/dark; PNG/ICO use dark ink.'},
     },
     app_icon: {path: runnerIcon, source: 'iphone-use-app-icon.png', sha256: sha256(appIcon)},
     files,

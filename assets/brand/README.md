@@ -19,7 +19,8 @@ need no Apple runtime. See the design kit for the reference and geometry limits.
 | [iphone-use-wordmark-dark.svg](iphone-use-wordmark-dark.svg) | 350 × 112 viewBox | Dark-mode README wordmark |
 | `iphone-use-wordmark.png`, `iphone-use-wordmark-dark.png` | 1400 × 448 px | Transparent wordmark exports |
 | [iphone-use-app-icon.png](iphone-use-app-icon.png) | 1024 × 1024 | Opaque white app icon / avatar |
-| `favicon-{16,32,48,64}.png` | Named pixel dimensions | Opaque white browser icons |
+| [favicon.svg](favicon.svg) | 144 × 144 viewBox | Transparent browser mark; light/dark foreground |
+| `favicon-{16,32,48,64}.png` | Named pixel dimensions | Transparent dark browser marks |
 | [favicon.ico](favicon.ico) | 16, 32, 48, 64, 256 px | Multi-resolution browser icon |
 
 The master colors are `#171717` and `#F5F5F2`. SVG cutouts are genuinely
@@ -47,6 +48,12 @@ to reduce empty margins. This leaves 10 design units of top/bottom clear space
 and keeps the gesture continuous at 16 px. Do not use the design kit's unadjusted
 `mark-16.png`, which is retained as a failed small-size sample. The normal master
 has a recommended minimum canvas of 24 px.
+
+Use `favicon.svg` as the preferred website icon, with PNG/ICO fallbacks. Its
+`prefers-color-scheme` rule switches the mark from dark ink to the inverse color;
+the background, speaker and swipe remain transparent. PNG and all embedded ICO
+sizes preserve alpha and use fixed dark ink. Verify contrast in the target browser;
+fallback images do not adapt to its theme. App icons remain opaque white.
 
 The local browser preview embeds `favicon-64.png` in `NativePreviewPage.faviconPNG`
 and serves it locally. When changing this export, update that base64 copy too;
