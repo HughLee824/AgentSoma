@@ -1,9 +1,14 @@
 # iphone-use brand assets
 
-The approved identity combines a rounded phone silhouette with a continuous
+The approved identity combines a continuous-corner phone silhouette with a continuous
 swipe cutout. These production exports use the final, right-adjusted gesture
 without the touch dot. The source geometry and outlined wordmark are preserved
 in [the design kit](iphone-use-final/README.md).
+
+The phone uses a frozen vector profile from SwiftUI's continuous rounded rectangle
+at the master dimensions (74 × 124, radius 17). Each corner has three cubic Bézier
+segments; the speaker and swipe retain their circular geometry. The SVG exports
+need no Apple runtime. See the design kit for the reference and geometry limits.
 
 | Asset | Size | Use |
 | --- | --- | --- |

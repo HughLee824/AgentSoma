@@ -57,17 +57,35 @@ def main():
         sizes[str(size)]=topology(image)
         if size>=24:assert sizes[str(size)]=={'components':1,'holes':2}
     phone=p['phone'];swipe=p['swipe'];speaker=p['speaker']
-    assert phone['width']>2*phone['radius'] and phone['height']>2*phone['radius']
+    extent=phone['radius']*phone['corner']['extent']
+    assert min(phone['width'],phone['height'])>2*extent
     assert speaker['height']==2*speaker['radius'] and speaker['width']>speaker['height']
     assert swipe['radius']>swipe['width']/2 and 0<swipe['end_degrees']-swipe['start_degrees']<180
     assert (swipe['radius']+swipe['width']/2)-(swipe['radius']-swipe['width']/2)==swipe['width']
     tangent_residual=max(abs(math.cos(math.radians(a))*(-math.sin(math.radians(a)))+math.sin(math.radians(a))*math.cos(math.radians(a))) for a in [swipe['start_degrees'],swipe['end_degrees']])
-    # Signed distance to the rounded phone; sampled checks do not claim an exact analytic minimum.
+    # Use the actual cubic outline, not the old circular rounded-rectangle SDF.
+    # The convex inscribed polyline gives a conservative clearance for interior points.
+    boundary=[]
+    for curve in resolved['phone_cubics']:
+        for i in range(129):
+            t=i/128;u=1-t
+            point=[u**3*curve[0][axis]+3*u*u*t*curve[1][axis]+
+                   3*u*t*t*curve[2][axis]+t**3*curve[3][axis] for axis in (0,1)]
+            if not boundary or math.dist(point,boundary[-1])>1e-9:boundary.append(point)
+    edges=list(zip(boundary,boundary[1:]+boundary[:1]))
+    for a,b in edges:
+        assert math.dist(a,b)>0
+    for index,b in enumerate(boundary):
+        a=boundary[index-1];c=boundary[(index+1)%len(boundary)]
+        assert (b[0]-a[0])*(c[1]-b[1])-(b[1]-a[1])*(c[0]-b[0])>=-1e-9
     def clearance(point):
-        radius=phone['radius'];half=[phone['width']/2,phone['height']/2]
-        center=[phone['x']+half[0],phone['y']+half[1]]
-        q=[abs(point[i]-center[i])-half[i]+radius for i in [0,1]]
-        return -(math.hypot(max(q[0],0),max(q[1],0))+min(max(q),0)-radius)
+        distances=[]
+        for a,b in edges:
+            dx,dy=b[0]-a[0],b[1]-a[1];px,py=point[0]-a[0],point[1]-a[1]
+            assert dx*py-dy*px>0, 'Cutout escapes the continuous phone outline'
+            t=max(0,min(1,(px*dx+py*dy)/(dx*dx+dy*dy)))
+            distances.append(math.hypot(px-t*dx,py-t*dy))
+        return min(distances)
     samples=[]
     for i in range(281):
         angle=math.radians(swipe['start_degrees']+(swipe['end_degrees']-swipe['start_degrees'])*i/280)
@@ -83,7 +101,9 @@ def main():
             'independent_rebuild_identical_svg_count':len(manifest['svg_sha256']),
             'inverse_alpha_identical':True,'pure_vector_no_font_dependency':True,
             'geometry':{'constant_arc_width':swipe['width'],'tangent_dot_residual':tangent_residual,
-                        'rounded_corners_fit':True,'sampled_arc_clearance_from_phone_units':min_clearance,'boundary_sample_count':len(samples)},
+                        'continuous_corners_fit':True,'corner_cubic_count':len(resolved['phone_cubics']),
+                        'phone_polyline_sample_count':len(boundary),
+                        'sampled_arc_clearance_from_phone_units':min_clearance,'boundary_sample_count':len(samples)},
             'raster_topology_alpha128_foreground8_background4':sizes,
             'recommended_min_canvas_px':24,'16px':'Curved cutout fragments at this threshold; do not use this master at 16px.',
             'visual_review':'not performed',

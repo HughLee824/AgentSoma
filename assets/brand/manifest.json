@@ -1,7 +1,7 @@
 {
   "brand": "iphone-use",
-  "direction": "Phone silhouette + continuous swipe",
-  "date": "2026-10-11",
+  "direction": "Continuous-corner phone + continuous swipe",
+  "date": "2026-11-08",
   "formats": [
     "SVG",
     "PNG",
@@ -34,13 +34,13 @@
   "app_icon": {
     "path": "Runner/Assets.xcassets/AppIcon.appiconset/AppIcon.png",
     "source": "iphone-use-app-icon.png",
-    "sha256": "6cbc11e689701c9af098e35c9fa29ebc5ec345d4a1a660d8782d754669594001"
+    "sha256": "5890fcacb197215f1c93852cfa74237f420450124f0693bd18c98f3516da4cf3"
   },
   "files": [
     {
       "path": "iphone-use-mark.svg",
-      "bytes": 546,
-      "sha256": "68adcfdefaa3e9740679a2cbb8acf0d886fae9fc46eaae9a38fcd114d81729da",
+      "bytes": 1293,
+      "sha256": "5ede0f54637fb9a8a5d80367be1eb9cb7aceeb38428561923c2287c5bc92f578",
       "format": "SVG",
       "viewBox": [
         0,
@@ -51,8 +51,8 @@
     },
     {
       "path": "iphone-use-mark-dark.svg",
-      "bytes": 549,
-      "sha256": "6d7408d9dd7b18ec48d8f058a8bae8037679743c74fe80fe767b3c765cfb9f10",
+      "bytes": 1296,
+      "sha256": "71172407e626c5d7a4a43326f7b7b9fa2634371218341c91383081fee5dc4102",
       "format": "SVG",
       "viewBox": [
         0,
@@ -63,8 +63,8 @@
     },
     {
       "path": "iphone-use-wordmark.svg",
-      "bytes": 8527,
-      "sha256": "482183c999eb1e41f257739bc11b4bdd29e6cbee72102bab381563ccf27a6d17",
+      "bytes": 9274,
+      "sha256": "cfc996eec8720253fad936905cac24824a60c9d295373f1d941a07f911d10b8b",
       "format": "SVG",
       "viewBox": [
         0,
@@ -75,8 +75,8 @@
     },
     {
       "path": "iphone-use-wordmark-dark.svg",
-      "bytes": 8527,
-      "sha256": "4d538815be64ffe5a8f817160cc24725535ce02d0da67a2cefaf4da63cfb58ea",
+      "bytes": 9274,
+      "sha256": "d6acca59c42def5b3dd4fce5d5646588f232b9adda932637940e19f389b98926",
       "format": "SVG",
       "viewBox": [
         0,
@@ -87,8 +87,8 @@
     },
     {
       "path": "iphone-use-mark.png",
-      "bytes": 23587,
-      "sha256": "6a5f35be72612e27a886fbfd913f50b03679a11c189550584bc8e8d7ef3e18b2",
+      "bytes": 24799,
+      "sha256": "cd0d016eac3affa678c648e2dfd784db0e9c53ad1a45751f89ffda98cb2c8d55",
       "format": "PNG",
       "dimensions": [
         1024,
@@ -98,8 +98,8 @@
     },
     {
       "path": "iphone-use-mark-256.png",
-      "bytes": 3569,
-      "sha256": "4518d63afe57843e4e87ff8e8fac04a99a912aed1529434565264b0bdb4a78aa",
+      "bytes": 3809,
+      "sha256": "e6ee51ee0cf87a991f97d634c0fda2b8537a18f9d778e9322e8b4b7945274521",
       "format": "PNG",
       "dimensions": [
         256,
@@ -109,8 +109,8 @@
     },
     {
       "path": "iphone-use-wordmark.png",
-      "bytes": 21051,
-      "sha256": "d99ecf96195ab7e4f9a958a5e2bf0c70313f124a96d234b0c89137de70a81bd9",
+      "bytes": 21354,
+      "sha256": "0871d048d6ca6919017f24f809040cda0b3dc0114b00f1643f02b461a04fb410",
       "format": "PNG",
       "dimensions": [
         1400,
@@ -120,8 +120,8 @@
     },
     {
       "path": "iphone-use-wordmark-dark.png",
-      "bytes": 21742,
-      "sha256": "0c38b14a0b0af3c4cadc59784def69efe469473bf250201ff506a5aab5ad329a",
+      "bytes": 22074,
+      "sha256": "d40cfd66841ebc1d6ccd090c0a005fccdf8bb416f44462d7ab80bb0bc62f23b9",
       "format": "PNG",
       "dimensions": [
         1400,
@@ -131,8 +131,8 @@
     },
     {
       "path": "iphone-use-app-icon.png",
-      "bytes": 19998,
-      "sha256": "6cbc11e689701c9af098e35c9fa29ebc5ec345d4a1a660d8782d754669594001",
+      "bytes": 21244,
+      "sha256": "5890fcacb197215f1c93852cfa74237f420450124f0693bd18c98f3516da4cf3",
       "format": "PNG",
       "dimensions": [
         1024,
@@ -142,8 +142,8 @@
     },
     {
       "path": "favicon-16.png",
-      "bytes": 242,
-      "sha256": "c446040d74abc824561c9f0df83b738a4526581cf50f209c05b66d5db9a1c499",
+      "bytes": 251,
+      "sha256": "457eb05e23c4b21b0d8c2b65b8cb20df542e0a0f94a4e5256ea4ae962539c490",
       "format": "PNG",
       "dimensions": [
         16,
@@ -153,8 +153,8 @@
     },
     {
       "path": "favicon-32.png",
-      "bytes": 441,
-      "sha256": "ec432966e7cc614059d20970149fb35e34ebe33b682207c4899782be33c628e2",
+      "bytes": 464,
+      "sha256": "392dabbf91221767ef1d61b1bacd0764355fa399c347c9440e003800b487de6f",
       "format": "PNG",
       "dimensions": [
         32,
@@ -164,8 +164,8 @@
     },
     {
       "path": "favicon-48.png",
-      "bytes": 612,
-      "sha256": "b4679b340c01e16c75557ffed5920be0d8a15aecb513a6310b666aabfc8fc902",
+      "bytes": 649,
+      "sha256": "189aff993b020e0ffb70bfdabfabf88056ff68c6265b138a8f31330c7182c051",
       "format": "PNG",
       "dimensions": [
         48,
@@ -175,8 +175,8 @@
     },
     {
       "path": "favicon-64.png",
-      "bytes": 851,
-      "sha256": "a68b73250a5ea75c55edf5e78877225f3c96aa407cee3082055729fe5e2d00c3",
+      "bytes": 885,
+      "sha256": "d3e5cf5dcedab1f6bb16984978c2478a697fd388e50fb70f6f9373a6cbdaa466",
       "format": "PNG",
       "dimensions": [
         64,
@@ -186,8 +186,8 @@
     },
     {
       "path": "favicon.ico",
-      "bytes": 6340,
-      "sha256": "af655822e6151cc6bb74d910dc22ce2d974d838c9ed64a918ebf93c38a2a05c1",
+      "bytes": 6791,
+      "sha256": "159c5af99201b83fd3406848de396a1fe7ca9bb879ace1de2e3a983f67966cd3",
       "format": "ICO",
       "dimensions": [
         256,

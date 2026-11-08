@@ -1,12 +1,12 @@
 {
   "svg_sha256": {
-    "mark.svg": "68adcfdefaa3e9740679a2cbb8acf0d886fae9fc46eaae9a38fcd114d81729da",
-    "inverse.svg": "6d7408d9dd7b18ec48d8f058a8bae8037679743c74fe80fe767b3c765cfb9f10",
-    "wordmark.svg": "482183c999eb1e41f257739bc11b4bdd29e6cbee72102bab381563ccf27a6d17",
-    "wordmark-inverse.svg": "4d538815be64ffe5a8f817160cc24725535ce02d0da67a2cefaf4da63cfb58ea",
-    "preview.svg": "798d2cdeb9654ebf25fa79ccbcdcd3d01f0cd18eddbc536706e55bcfb374a6f8",
-    "construction.svg": "9e48826ac26e32b1e89f43a41eba68addad544c20ee8b3e8496a22c9ae203ba4"
+    "mark.svg": "5ede0f54637fb9a8a5d80367be1eb9cb7aceeb38428561923c2287c5bc92f578",
+    "inverse.svg": "71172407e626c5d7a4a43326f7b7b9fa2634371218341c91383081fee5dc4102",
+    "wordmark.svg": "cfc996eec8720253fad936905cac24824a60c9d295373f1d941a07f911d10b8b",
+    "wordmark-inverse.svg": "d6acca59c42def5b3dd4fce5d5646588f232b9adda932637940e19f389b98926",
+    "preview.svg": "ddd9737a8ba2a6175c6749d9260f0099151dfc7698716fb6c83d77e8dc6eb454",
+    "construction.svg": "bc34bc8db15bcd539a24256a5d4e4e5f441b893f67760981ab779eca7e8096fa"
   },
   "font": "Retained Geist Medium 500 vector outlines from previous A wordmark",
-  "input_sha256": "2d058fbfed1bccf1f7892a2cab789d8352a09fbe26e6409c5c0a524118aa075d"
+  "input_sha256": "6e045aa5490ddb55429316ac02b7d7e93c3a708f74049b117124e8626bafac1b"
 }

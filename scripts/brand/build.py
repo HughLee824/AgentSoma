@@ -17,6 +17,23 @@ def rect(o):
     x,y,w,h,r=[o[k] for k in ('x','y','width','height','radius')]
     assert min(w,h)>=2*r
     return f'M{x+r} {y} H{x+w-r} A{r} {r} 0 0 1 {x+w} {y+r} V{y+h-r} A{r} {r} 0 0 1 {x+w-r} {y+h} H{x+r} A{r} {r} 0 0 1 {x} {y+h-r} V{y+r} A{r} {r} 0 0 1 {x+r} {y} Z'
+def phone_outline(o):
+    """Frozen native continuous-corner profile; only the logo's non-overlapping case."""
+    x,y,w,h,r=[o[k] for k in ('x','y','width','height','radius')]
+    corner=o['corner'];extent=corner['extent'];curves=corner['cubics']
+    assert corner['style']=='continuous' and r>0 and min(w,h)>2*r*extent
+    assert len(curves)==3 and all(len(curve)==3 for curve in curves)
+    transforms=[lambda u,v:[x+w-r*u,y+r*v],lambda u,v:[x+w-r*v,y+h-r*u],
+                lambda u,v:[x+r*u,y+h-r*v],lambda u,v:[x+r*v,y+r*u]]
+    commands=[];segments=[]
+    for transform in transforms:
+        start=transform(extent,0)
+        commands.append(('M' if not commands else 'L')+xy(start))
+        for curve in curves:
+            points=[transform(*point) for point in curve]
+            commands.append('C'+' '.join(xy(point) for point in points))
+            segments.append([start,*points]);start=points[-1]
+    return ' '.join(commands)+' Z',segments
 def document(body,w,h,title):return f'<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" viewBox="0 0 {w} {h}" role="img" aria-label="{title}">{body}</svg>\n'
 def label(x,y,t,size=17,color='#6B6B65',anchor='start'):return f'<text x="{x}" y="{y}" font-family="Helvetica,Arial,sans-serif" font-size="{size}" fill="{color}" text-anchor="{anchor}">{t}</text>'
 
@@ -31,8 +48,9 @@ def geometry(p):
          f'A{n(half)} {n(half)} 0 0 1 {xy(inner_end)} '
          f'A{n(r-half)} {n(r-half)} 0 0 0 {xy(inner_start)} '
          f'A{n(half)} {n(half)} 0 0 1 {xy(outer_start)} Z')
-    pieces=[rect(p['phone']),rect(p['speaker']),arc]
-    return {'path':' '.join(pieces),'pieces':pieces,'arc_start':start,'arc_end':end,'cap_centers':[start,end]}
+    outline,curves=phone_outline(p['phone'])
+    pieces=[outline,rect(p['speaker']),arc]
+    return {'path':' '.join(pieces),'pieces':pieces,'phone_cubics':curves,'arc_start':start,'arc_end':end,'cap_centers':[start,end]}
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--out',type=Path,default=ROOT);args=parser.parse_args();out=args.out;out.mkdir(parents=True,exist_ok=True)
@@ -69,7 +87,10 @@ def main():
     for y in [o['y'],o['y']+o['height'],sp['y'],s['center'][1],g['arc_end'][1]]:sheet+=f'<path d="M14 {y} H146" stroke="#D3D3CB" stroke-width=".17"/>'
     sheet+=mark('url(#hatch)')+f'<path d="{g["path"]}" fill="none" stroke="#55554F" stroke-width=".24"/>'
     for r in [s['radius']-s['width']/2,s['radius'],s['radius']+s['width']/2]:sheet+=f'<circle cx="{s["center"][0]}" cy="{s["center"][1]}" r="{r}" fill="none" stroke="#BDBDB2" stroke-width=".17"/>'
-    centers=[([o['x']+o['radius'],o['y']+o['radius']],o['radius']),([o['x']+o['width']-o['radius'],o['y']+o['height']-o['radius']],o['radius'])]+[(c,s['width']/2) for c in g['cap_centers']]
+    for curve in g['phone_cubics']:
+        sheet+=f'<path d="M{xy(curve[0])} '+ ' '.join('L'+xy(point) for point in curve[1:])+ '" fill="none" stroke="#A4A498" stroke-width=".18"/>'
+        for point in curve:sheet+=f'<circle cx="{n(point[0])}" cy="{n(point[1])}" r=".45" fill="#7E7E73"/>'
+    centers=[(c,s['width']/2) for c in g['cap_centers']]
     for c,r in centers:sheet+=f'<circle cx="{c[0]}" cy="{c[1]}" r="{r}" fill="none" stroke="#A4A498" stroke-width=".18"/>'
     for end in [g['arc_start'],g['arc_end']]:sheet+=f'<path d="M{xy(s["center"])} L{xy(end)}" stroke="#99998E" stroke-width=".18"/>'
     sheet+='</g>'
@@ -78,11 +99,12 @@ def main():
     sheet+=dim([24,o['y']],[24,o['y']+o['height']],f'{o["height"]}/{unit} x',13,81)
     sheet+=dim([s['center'][0]+s['radius']-s['width']/2,s['center'][1]],[s['center'][0]+s['radius']+s['width']/2,s['center'][1]],'x',s['center'][0]+s['radius'],s['center'][1]-4)
     sheet+=dim(s['center'],g['arc_start'],'R = 6x',s['center'][0]+s['radius']/2,s['center'][1]-4)
-    sheet+=dim([o['x']+o['radius'],o['y']+o['radius']],[o['x']+o['radius'],o['y']],f'R {o["radius"]}',o['x']+o['radius']+10,o['y']+8)
-    for y,title,value in [(275,'DEVICE',f'{o["width"]} × {o["height"]} / R{o["radius"]}'),(385,'SWIPE ARC',f'R{s["radius"]} / {s["end_degrees"]-s["start_degrees"]}° / width {s["width"]}'),(495,'ARC CENTER',f'({s["center"][0]}, {s["center"][1]})'),(605,'TOP CAPSULE',f'{sp["width"]} × {sp["height"]} / R{sp["radius"]}')]:
+    extent=o['radius']*o['corner']['extent']
+    sheet+=dim([o['x'],o['y']-4],[o['x']+extent,o['y']-4],f'{extent:.2f}',o['x']+extent/2,o['y']-7)
+    for y,title,value in [(275,'DEVICE / CONTINUOUS',f'{o["width"]} × {o["height"]} / radius {o["radius"]}'),(385,'SWIPE ARC',f'R{s["radius"]} / {s["end_degrees"]-s["start_degrees"]}° / width {s["width"]}'),(495,'ARC CENTER',f'({s["center"][0]}, {s["center"][1]})'),(605,'TOP CAPSULE',f'{sp["width"]} × {sp["height"]} / R{sp["radius"]}')]:
         sheet+=label(1060,y,title,14)+label(1060,y+38,value,22,ink)
     sheet+=label(64,985,'Same compound path in the master, inverse and construction. Two true transparent cutouts.',17)
-    sheet+=label(64,1024,'All curves are circular arcs. Cap centers lie on the gesture centerline; gesture width stays constant.',17)
+    sheet+=label(64,1024,'Phone: three cubic Beziers per corner, frozen SwiftUI continuous profile. Swipe: constant-width circular arc.',17)
     files['construction.svg']=document(sheet,1500,1080,'iphone-use swipe construction')
     for name,content in files.items():(out/name).write_text(content)
     (out/'resolved-geometry.json').write_text(json.dumps(g,indent=2)+'\n')
