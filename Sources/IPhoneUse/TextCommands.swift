@@ -75,7 +75,8 @@ struct TypeText: ParsableCommand {
     mutating func run() throws {
         let session = try options.requiredSession()
         try outputAction(
-            session: session, observe: observation.observe, agentOutput: observation.output.agentOutput
+            session: session, observe: observation.observe, agentOutput: observation.output.agentOutput,
+            evidenceDir: options.evidence.directory
         ) {
             let value: String
             do { value = try stdin ? TextInput.read(from: .standardInput) : text! } catch {
@@ -124,7 +125,7 @@ struct TextPrepare: ParsableCommand {
     var ignoreRect: String?
     mutating func run() throws {
         let session = try options.requiredSession()
-        try output(agentOutput: presentation.agentOutput) {
+        try output(agentOutput: presentation.agentOutput, evidenceDir: options.evidence.directory) {
             guard fieldRect != nil || ignoreRect == nil else {
                 throw ValidationError("--ignore-rect requires --field-rect")
             }
@@ -165,7 +166,7 @@ struct TextFinish: ParsableCommand {
 
     mutating func run() throws {
         let session = try options.requiredSession()
-        try output(agentOutput: presentation.agentOutput) {
+        try output(agentOutput: presentation.agentOutput, evidenceDir: options.evidence.directory) {
             try SessionClient.call(
                 session: session, operation: "text-finish",
                 fields: ["reference": reference, "transaction": transaction]
@@ -219,7 +220,8 @@ struct Press: ParsableCommand {
         if let caretRect { fields["caretRect"] = caretRect }
         if let ignoreRect { fields["ignoreRect"] = ignoreRect }
         try outputAction(
-            session: session, observe: observation.observe, agentOutput: observation.output.agentOutput
+            session: session, observe: observation.observe, agentOutput: observation.output.agentOutput,
+            evidenceDir: options.evidence.directory
         ) {
             try SessionClient.call(
                 session: session, operation: caretRect == nil ? "press" : "press-with-caret", fields: fields)
@@ -234,7 +236,9 @@ struct Focus: ParsableCommand {
     @Argument(help: "Current Runner input element reference.") var reference: String
     mutating func run() throws {
         let session = try options.requiredSession()
-        try outputAction(session: session, observe: observation.observe, agentOutput: observation.output.agentOutput) {
+        try outputAction(
+            session: session, observe: observation.observe, agentOutput: observation.output.agentOutput,
+            evidenceDir: options.evidence.directory) {
             try SessionClient.call(session: session, operation: "focus", fields: ["reference": reference])
         }
     }
@@ -249,7 +253,9 @@ struct Clear: ParsableCommand {
     var reference: String
     mutating func run() throws {
         let session = try options.requiredSession()
-        try outputAction(session: session, observe: observation.observe, agentOutput: observation.output.agentOutput) {
+        try outputAction(
+            session: session, observe: observation.observe, agentOutput: observation.output.agentOutput,
+            evidenceDir: options.evidence.directory) {
             try SessionClient.call(session: session, operation: "clear", fields: ["reference": reference])
         }
     }

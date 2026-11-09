@@ -41,6 +41,7 @@ final class LiveSessionTests: XCTestCase {
     }
     var actionFrame: ActionFrame?
     var screenGuardResult: [String: Any]?
+    var phaseTimings: [String: Double] = [:]
 
     override func record(_ issue: XCTIssue) {
         if handlingCommand { commandIssues.append(issue.compactDescription) } else { super.record(issue) }
@@ -83,6 +84,7 @@ final class LiveSessionTests: XCTestCase {
                 request, server: server, token: token,
                 sessionID: sessionID, response: &response)
             completeCommand(command, response: &response)
+            response["runnerTiming"] = phaseTimings
             response["runnerMs"] = (ProcessInfo.processInfo.systemUptime - began) * 1000
             try await server.reply(response, to: request)
             print(
@@ -113,6 +115,7 @@ final class LiveSessionTests: XCTestCase {
         frameStability = nil
         actionFrame = nil
         screenGuardResult = nil
+        phaseTimings = [:]
     }
 
     @MainActor

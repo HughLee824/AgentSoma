@@ -151,6 +151,18 @@ class PluginPreflightTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("Use separate action", result.stdout)
 
+    def test_native_evidence_is_advertised_only_when_both_commands_support_it(self):
+        for tap, connect, available in [(True, True, True), (True, False, False), (False, True, False)]:
+            self.write_command("iphone-use", f"""case "$1" in
+--version) echo '0.6.4';;
+tap) echo '--observe {"--evidence-dir" if tap else ""}';;
+connect) echo '--mode {"--evidence-dir" if connect else ""}';;
+*) exit 99;;
+esac""")
+            result = self.run_check()
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual("Native evidence: available" in result.stdout, available)
+
     def test_explicit_candidate_path_with_spaces_and_capabilities(self):
         self.write_cli("0.1.0-dev.firstuse.6")
         candidate = self.root / "candidate with spaces"

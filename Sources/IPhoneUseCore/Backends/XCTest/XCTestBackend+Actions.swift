@@ -52,6 +52,8 @@ extension XCTestBackend {
 
     func apps() throws -> AppCatalog {
         guard let deviceUDID else { throw IPhoneUseError("backend_unavailable", "Device is not connected") }
+        let began = ProcessInfo.processInfo.systemUptime
+        defer { recordTiming("appCatalog", since: began) }
         return try AppCatalog(
             CoreDevice.read(["device", "info", "apps", "--device", deviceUDID, "--include-all-apps"]))
     }
@@ -61,6 +63,8 @@ extension XCTestBackend {
         let response = try request(
             "act", fields: Self.actionFields(action, target: target),
             onInputStarted: target.gesture == nil ? nil : onInputStarted)
+        let began = ProcessInfo.processInfo.systemUptime
+        defer { recordTiming("actionDecode", since: began, facts: ["requestID": response["id"] ?? "missing"]) }
         return try ActionReply.decode(
             XCTestCapture.actionResponse(
                 response, directory: paths.directory,
@@ -161,6 +165,8 @@ extension XCTestBackend {
 
     func observe() throws -> CapturedObservation {
         let response = try request("observe")
+        let began = ProcessInfo.processInfo.systemUptime
+        defer { recordTiming("observationDecode", since: began, facts: ["requestID": response["id"] ?? "missing"]) }
         guard let result = response["result"] as? [String: Any],
             response["ok"] as? Bool == true || result["axStatus"] as? String == "unavailable"
         else {

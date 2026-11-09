@@ -34,6 +34,7 @@ struct Connect: ParsableCommand {
             """
     )
     @Option(help: "Connected iPhone UDID or CoreDevice identifier.") var device: String
+    @OptionGroup var evidence: EvidenceOptions
     @Option(
         help:
             """
@@ -86,7 +87,7 @@ struct Connect: ParsableCommand {
     @Option(help: "Port for --preview; otherwise use the saved preview port (default 8765).") var port: Int?
 
     mutating func run() throws {
-        try output {
+        try output(evidenceDir: evidence.directory) {
             let timeout = try IdleTimeout(idleTimeout)
             let selection = try ModeConfiguration().select(
                 mode: mode, backend: backend, xctestrun: xctestrun,

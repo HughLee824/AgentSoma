@@ -11,7 +11,7 @@ struct RecordStart: ParsableCommand {
     var duration: Double = 60
     mutating func run() throws {
         let session = try options.requiredSession()
-        try output {
+        try output(evidenceDir: options.evidence.directory) {
             try SessionClient.call(
                 session: session, operation: "record-start", fields: ["duration": duration])
         }
@@ -26,7 +26,7 @@ struct RecordStop: ParsableCommand {
     @Argument(help: "Recording ID returned by record-start or status.") var recordingID: String
     mutating func run() throws {
         let session = try options.requiredSession()
-        try output {
+        try output(evidenceDir: options.evidence.directory) {
             try SessionClient.call(
                 session: session, operation: "record-stop", fields: ["recordingID": recordingID])
         }
@@ -49,7 +49,7 @@ struct Preview: ParsableCommand {
             """
     ) var port: Int?
     mutating func run() throws {
-        try output {
+        try output(evidenceDir: options.evidence.directory) {
             guard device == nil || options.session == nil else {
                 throw ValidationError("Use --device or --session, not both")
             }

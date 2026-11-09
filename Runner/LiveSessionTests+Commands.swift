@@ -33,7 +33,7 @@ extension LiveSessionTests {
         if operation == "app-lifecycle" { return try appLifecycle(command) }
         if operation == "observe" { return try observeCurrentCommand() }
         guard operation == "act" else { throw CommandError("unknown_operation") }
-        let result = try perform(command)
+        let result = try performTimed(command)
         inputCompleted = true
         // Home is acknowledged system navigation. Its destination can contain
         // continuously animated icons; page readiness is left to observation.
@@ -43,6 +43,13 @@ extension LiveSessionTests {
             postObservationError = "post_action_capture_unavailable"
         }
         return result
+    }
+
+    @MainActor
+    private func performTimed(_ command: [String: Any]) throws -> [String: Any] {
+        let began = ProcessInfo.processInfo.systemUptime
+        defer { addTiming("inputValidationAndDispatch", since: began) }
+        return try perform(command)
     }
 
     private func skipsPostInputSampling(_ command: [String: Any]) -> Bool {

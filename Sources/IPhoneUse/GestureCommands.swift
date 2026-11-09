@@ -69,7 +69,8 @@ struct Tap: ParsableCommand {
         fields["reference"] = reference
         fields["x"] = column; fields["y"] = row
         try outputAction(
-            session: session, observe: observation.observe, agentOutput: observation.output.agentOutput
+            session: session, observe: observation.observe, agentOutput: observation.output.agentOutput,
+            evidenceDir: options.evidence.directory
         ) {
             try SessionClient.call(session: session, operation: "tap", fields: fields)
         }
@@ -91,7 +92,8 @@ struct DoubleTap: ParsableCommand {
         var fields = screenGuard.fields
         fields["reference"] = reference; fields["x"] = column; fields["y"] = row
         try outputAction(
-            session: session, observe: observation.observe, agentOutput: observation.output.agentOutput
+            session: session, observe: observation.observe, agentOutput: observation.output.agentOutput,
+            evidenceDir: options.evidence.directory
         ) {
             try SessionClient.call(session: session, operation: "double-tap", fields: fields)
         }
@@ -117,7 +119,8 @@ struct Pinch: ParsableCommand {
         fields["fromDistance"] = fromDistance; fields["toDistance"] = toDistance
         fields["duration"] = duration
         try outputAction(
-            session: session, observe: observation.observe, agentOutput: observation.output.agentOutput
+            session: session, observe: observation.observe, agentOutput: observation.output.agentOutput,
+            evidenceDir: options.evidence.directory
         ) {
             try SessionClient.call(session: session, operation: "pinch", fields: fields)
         }
@@ -140,7 +143,8 @@ struct LongPress: ParsableCommand {
         fields["reference"] = reference; fields["x"] = column; fields["y"] = row
         fields["duration"] = duration
         try outputAction(
-            session: session, observe: observation.observe, agentOutput: observation.output.agentOutput
+            session: session, observe: observation.observe, agentOutput: observation.output.agentOutput,
+            evidenceDir: options.evidence.directory
         ) {
             try SessionClient.call(session: session, operation: "long-press", fields: fields)
         }
@@ -156,7 +160,8 @@ struct Home: ParsableCommand {
     mutating func run() throws {
         let session = try options.requiredSession()
         try outputAction(
-            session: session, observe: observation.observe, agentOutput: observation.output.agentOutput
+            session: session, observe: observation.observe, agentOutput: observation.output.agentOutput,
+            evidenceDir: options.evidence.directory
         ) {
             try SessionClient.call(session: session, operation: "home", fields: ["reference": reference])
         }
@@ -216,7 +221,8 @@ struct Swipe: ParsableCommand {
         fields["velocity"] = velocity; fields["pressDuration"] = pressDuration
         fields["holdDuration"] = holdDuration
         try outputAction(
-            session: session, observe: observation.observe, agentOutput: observation.output.agentOutput
+            session: session, observe: observation.observe, agentOutput: observation.output.agentOutput,
+            evidenceDir: options.evidence.directory
         ) {
             try SessionClient.call(session: session, operation: "swipe", fields: fields)
         }

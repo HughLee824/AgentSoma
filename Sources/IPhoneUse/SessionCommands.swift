@@ -12,7 +12,9 @@ struct Apps: ParsableCommand {
         let session = try options.requiredSession()
         var fields: [String: Any] = ["offset": offset]
         fields["query"] = query
-        try output { try SessionClient.call(session: session, operation: "apps", fields: fields) }
+        try output(evidenceDir: options.evidence.directory) {
+            try SessionClient.call(session: session, operation: "apps", fields: fields)
+        }
     }
 }
 
@@ -22,7 +24,9 @@ struct Status: ParsableCommand {
     @OptionGroup var options: SessionOptions
     mutating func run() throws {
         let session = try options.requiredSession()
-        try output { try SessionClient.call(session: session, operation: "status") }
+        try output(evidenceDir: options.evidence.directory) {
+            try SessionClient.call(session: session, operation: "status")
+        }
     }
 }
 
@@ -35,7 +39,8 @@ struct Open: ParsableCommand {
     mutating func run() throws {
         let session = try options.requiredSession()
         try outputAction(
-            session: session, observe: observation.observe, agentOutput: observation.output.agentOutput
+            session: session, observe: observation.observe, agentOutput: observation.output.agentOutput,
+            evidenceDir: options.evidence.directory
         ) {
             try SessionClient.call(session: session, operation: "open", fields: ["bundleId": bundleID])
         }
@@ -51,7 +56,8 @@ struct Terminate: ParsableCommand {
     mutating func run() throws {
         let session = try options.requiredSession()
         try outputAction(
-            session: session, observe: observation.observe, agentOutput: observation.output.agentOutput
+            session: session, observe: observation.observe, agentOutput: observation.output.agentOutput,
+            evidenceDir: options.evidence.directory
         ) {
             try SessionClient.call(session: session, operation: "terminate", fields: ["bundleId": bundleID])
         }
@@ -69,7 +75,8 @@ struct Relaunch: ParsableCommand {
     mutating func run() throws {
         let session = try options.requiredSession()
         try outputAction(
-            session: session, observe: observation.observe, agentOutput: observation.output.agentOutput
+            session: session, observe: observation.observe, agentOutput: observation.output.agentOutput,
+            evidenceDir: options.evidence.directory
         ) {
             try SessionClient.call(session: session, operation: "relaunch", fields: ["bundleId": bundleID])
         }
@@ -82,7 +89,9 @@ struct Disconnect: ParsableCommand {
     @OptionGroup var options: SessionOptions
     mutating func run() throws {
         let session = try options.requiredSession()
-        try output { try SessionClient.call(session: session, operation: "disconnect") }
+        try output(evidenceDir: options.evidence.directory) {
+            try SessionClient.call(session: session, operation: "disconnect")
+        }
     }
 }
 
@@ -92,7 +101,9 @@ struct Observe: ParsableCommand {
     @OptionGroup var options: SessionOptions
     mutating func run() throws {
         let session = try options.requiredSession()
-        try output(compact: true) { try SessionClient.call(session: session, operation: "observe") }
+        try output(compact: true, evidenceDir: options.evidence.directory) {
+            try SessionClient.call(session: session, operation: "observe")
+        }
     }
 }
 
@@ -127,7 +138,7 @@ struct Inspect: ParsableCommand {
         let session = try options.requiredSession()
         var fields: [String: Any] = ["reference": reference, "offset": offset]
         fields["query"] = query
-        try output(compact: true) {
+        try output(compact: true, evidenceDir: options.evidence.directory) {
             let response = try SessionClient.call(session: session, operation: "inspect", fields: fields)
             if let query, response["ok"] as? Bool == true,
                 (response["result"] as? [String: Any])?["query"] as? String != query {

@@ -2,6 +2,8 @@
 
 Use only when `result.support.textMethods` includes `touch-paste`. This is an explicit alternative to keyboard typing, useful when an app closes its editor on keyboard changes. It does not switch control backends, call XCTest typing, prepare/register a keyboard or send a Paste shortcut. The host uses only the Apple clipboard service; subsequent UI gestures use the selected mode.
 
+In **Runner**, direct XCTest element typing is preferred. Select this fallback only for an explicit user request or an evidenced limitation, following [Runner input selection](runner-actions.md). Its availability alone does not make it the preferred method. Do not automatically paste the original text after an uncertain or partial direct input; establish the current contents and insertion point first. Standard mode retains the method selection in [native text](native-text.md).
+
 This guarantee applies to the input path. Runner session startup can independently trigger XCTest keyboard registration; this method does not alter startup.
 
 1. Inspect a current screenshot and open the intended input if needed. Do not call text-prepare for this method.

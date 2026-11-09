@@ -11,18 +11,8 @@ function blocks(path) {
   return [...readFileSync(new URL(path, root), 'utf8').matchAll(/```javascript\n([\s\S]*?)```/g)]
     .map(match => match[1]);
 }
-function sectionBlock(path, heading) {
-  const document = readFileSync(new URL(path, root), 'utf8');
-  const section = document.split(`## ${heading}\n`)[1]?.split('\n## ')[0];
-  assert.ok(section, `Missing template section: ${heading}`);
-  const code = section.match(/```javascript\n([\s\S]*?)```/)?.[1];
-  assert.ok(code, `Missing JavaScript template: ${heading}`);
-  return code;
-}
-const codexCalls = 'skills/iphone-use/references/codex-calls.md';
-const start = sectionBlock(codexCalls, 'Start');
-const resume = sectionBlock(codexCalls, 'Continue only if pending');
-const readObservation = sectionBlock(codexCalls, 'Only if image reading failed');
+const [direct, imageRead] = blocks('skills/iphone-use/references/codex-calls.md');
+const [resume] = blocks('skills/iphone-use/references/codex-continuation.md');
 const [combined] = blocks('skills/iphone-use/references/action-observation.md');
 const session = 'test-session';
 
@@ -61,10 +51,6 @@ test('Harness result capture preserves full JSON, stderr and nonzero status with
   }
 });
 const observed = {exit_code: 0, output: 'observation=o2 refs=current\nscreenshot="/fixture/screen.png"\n'};
-function memory(initial) {
-  const values = new Map([['iphone-use.execution', initial]]);
-  return {store: (key, value) => values.set(key, value), load: key => values.get(key)};
-}
 function reply(outcome, fields = {}) {
   return {exit_code: outcome === 'completed' ? 0 : 1,
     output: JSON.stringify({session, ok: outcome === 'completed', outcome, ...fields})};
@@ -92,119 +78,42 @@ async function run(executions, continuations = [], action = ['tap', 'o1:e2']) {
   return {calls, output};
 }
 
-test('basic template preserves literal shell arguments and the background handle', async () => {
-  const values = ['', 'plain', 'two words', "O'Brien", '版本发布事项讨论', '$(printf SUBSTITUTED)',
-    '`printf SUBSTITUTED`', '$HOME; exit 17', '"quoted" \\ path'];
-  for (const value of values) {
-    const pending = {output: 'partial', session_id: 42};
-    const output = [];
-    const state = memory();
-    const code = start.replace('const argv = ["iphone-use", "devices"];',
-      `const argv = ${JSON.stringify(['/usr/bin/printf', '%s', value])};`);
-    await new AsyncFunction('tools', 'text', 'store', 'load', code)({exec_command: async options => {
-      assert.equal(execFileSync('/bin/sh', ['-c', options.cmd], {encoding: 'utf8'}), value);
-      return pending;
-    }}, value => output.push(value), state.store, state.load);
-    assert.strictEqual(output[0], pending);
-    assert.strictEqual(state.load('iphone-use.execution'), pending);
-  }
-});
-
-test('start preserves the discovered execution context across subsequent commands', async () => {
-  const state = memory();
-  const context = {sandbox_permissions: 'require_escalated', justification: 'Authorized host context'};
-  state.store('iphone-use.execution-context', context);
-  const execute = new AsyncFunction('tools', 'text', 'store', 'load', start);
-  for (let command = 0; command < 2; command++) {
-    const result = {exit_code: 0, output: 'done'};
-    await execute({exec_command: async options => {
-      assert.equal(options.sandbox_permissions, context.sandbox_permissions);
-      assert.equal(options.justification, context.justification);
-      return result;
-    }}, () => {}, state.store, state.load);
-    assert.strictEqual(state.load('iphone-use.execution'), result);
-    assert.deepEqual(state.load('iphone-use.execution-context'), context);
-  }
-});
-
-test('basic continuation preserves pending, failed, and successful results', async () => {
-  for (const result of [{output: 'partial', session_id: 12345}, reply('unknown'), reply('completed')]) {
-    const output = [];
-    const state = memory({session_id: 12345, output: 'earlier chunk'});
+test('direct CLI example returns pending and failed results without replay or parsing', async () => {
+  for (const result of [{session_id: 42, output: 'partial'},
+    {exit_code: 1, output: '{"action":{"outcome":"unknown"}}'}]) {
     let calls = 0;
-    await new AsyncFunction('tools', 'text', 'store', 'load', resume)({write_stdin: async options => {
+    const output = [];
+    await new AsyncFunction('tools', 'text', direct)({exec_command: async options => {
       calls++;
-      assert.equal(options.session_id, 12345);
-      assert.equal(options.chars, '');
+      assert.equal(options.sandbox_permissions, 'require_escalated');
       return result;
-    }}, value => output.push(value), state.store, state.load);
+    }}, value => output.push(value));
     assert.equal(calls, 1);
-    assert.deepEqual(output[0], Number.isInteger(result.exit_code)
-      ? {...result, output: 'earlier chunk' + result.output} : result);
-    assert.deepEqual(state.load('iphone-use.execution'), {...result, output: 'earlier chunk' + result.output});
+    assert.strictEqual(output[0], result);
   }
 });
 
-test('continuation rejects stale or completed handles before polling', async () => {
-  for (const previous of [undefined, {session_id: 42}, {session_id: 12345, exit_code: 0}]) {
-    const state = memory(previous);
-    await assert.rejects(new AsyncFunction('tools', 'text', 'store', 'load', resume)(
-      {}, () => {}, state.store, state.load), /running command/);
-  }
-});
-
-test('observe reader opens successful captures even when the action fails', async () => {
-  for (const outcome of ['completed', 'unknown', 'not_dispatched']) {
-    const payload = {ok: outcome === 'completed', action: {outcome},
-      observation: {ok: true, result: {screenshot: '/fixture/screen.png', text: 'fresh refs'}}};
-    const output = [];
-    const images = [];
-    const execution = {exit_code: payload.ok ? 0 : 1, output: JSON.stringify(payload)};
-    const state = memory(execution);
-    await new AsyncFunction('tools', 'text', 'image', 'load', readObservation)({
-      view_image: async options => {
-        assert.equal(options.path, '/fixture/screen.png');
-        assert.deepEqual(output, [{exit_code: execution.exit_code, ...payload}]);
-        return {image_url: 'data:image/png;base64,fixture'};
-      }
-    }, value => output.push(value), value => images.push(value), state.load);
-    assert.deepEqual(images, ['data:image/png;base64,fixture']);
-  }
-});
-
-test('observe reader waits for full accumulated JSON and never repeats input', async () => {
-  const payload = {ok: true, action: {outcome: 'completed'},
-    observation: {ok: true, result: {screenshot: '/fixture/screen.png'}}};
-  const json = JSON.stringify(payload);
-  const state = memory();
+test('direct continuation polls once and exposes the chunk unchanged', async () => {
+  const result = {exit_code: 1, output: 'remaining output'};
+  let calls = 0;
   const output = [];
-  const emit = value => output.push(value);
-  await new AsyncFunction('tools', 'text', 'store', 'load', start)({exec_command: async () =>
-    ({session_id: 12345, output: json.slice(0, 20)})}, emit, state.store, state.load);
-  const reader = new AsyncFunction('tools', 'text', 'image', 'load', readObservation);
-  await reader({}, emit, () => assert.fail('pending screenshot'), state.load);
-  assert.equal(output.at(-1).pending, true);
-  let images = 0;
-  await new AsyncFunction('tools', 'text', 'store', 'load', 'image', resume)({write_stdin: async () =>
-    ({exit_code: 0, output: json.slice(20)}), view_image: async () => ({image_url: 'fixture'})},
-    emit, state.store, state.load, () => images++);
-  assert.equal(images, 1); // No second reader or device observation is needed.
-  assert.equal(state.load('iphone-use.execution').output, json);
+  await new AsyncFunction('tools', 'text', resume)({write_stdin: async options => {
+    calls++;
+    assert.equal(options.session_id, 12345);
+    assert.equal(options.chars, '');
+    return result;
+  }}, value => output.push(value));
+  assert.equal(calls, 1);
+  assert.strictEqual(output[0], result);
 });
 
-test('failed observations or image loading preserve action facts without device calls', async () => {
-  const reader = new AsyncFunction('tools', 'text', 'image', 'load', readObservation);
-  for (const observation of [{ok: false, error: {code: 'capture_failed'}}, {skipped: 'not_dispatched'},
-    {ok: true, result: {screenshot: '/missing.png'}}]) {
-    const payload = {ok: false, action: {outcome: 'unknown'}, observation};
-    const state = memory({exit_code: 1, output: JSON.stringify(payload)});
-    const output = [];
-    const reading = reader({view_image: async () => {throw new Error('image unavailable');}},
-      value => output.push(value), () => assert.fail('unexpected image'), state.load);
-    if (observation.ok) await assert.rejects(reading, /image unavailable/);
-    else await reading;
-    assert.deepEqual(output, [{exit_code: 1, ...payload}]);
-  }
+test('direct image read never invokes a device command, including on read failure', async () => {
+  const read = new AsyncFunction('tools', 'image', imageRead);
+  const images = [];
+  await read({view_image: async () => ({image_url: 'fixture'})}, value => images.push(value));
+  assert.deepEqual(images, ['fixture']);
+  await assert.rejects(read({view_image: async () => {throw Error('missing image');}},
+    () => assert.fail()), /missing image/);
 });
 
 test('completed and unknown actions each get one new observation', async () => {
@@ -300,45 +209,4 @@ test('unsupported operations fail before invoking a command', async () => {
   for (const action of [['disconnect'], ['setup'], [], ['tap', 42]]) {
     await assert.rejects(run([], [], action), /Supply a session/);
   }
-});
-
-
-test('completed command opens attached image in the same call, including native preparation and rejection', async () => {
-  for (const outcome of ['completed', 'unknown', 'not_dispatched']) {
-    for (const combined of [false, true]) {
-      const observation = {ok: true, phase: 'pre_input_rejection',
-        result: {screenshot: '/fixture/screen.png', observation: 'o3', refs: 'current'}};
-      const action = {ok: outcome === 'completed', outcome, requiresObservation: true};
-      const payload = combined ? {ok: false, action, observation, receipt: '/private/receipt.json'}
-        : {...action, observation};
-      const execution = {exit_code: payload.ok ? 0 : 1, output: JSON.stringify(payload)};
-      const state = memory();
-      const output = [], images = [];
-      let calls = 0;
-      await new AsyncFunction('tools', 'text', 'store', 'image', 'load', start)({
-        exec_command: async () => {calls++; return execution;},
-        view_image: async ({path}) => {
-          assert.equal(path, '/fixture/screen.png');
-          assert.deepEqual(output, [{exit_code: execution.exit_code, ...payload}]);
-          return {image_url: 'fixture'};
-        }
-      }, value => output.push(value), state.store, value => images.push(value), state.load);
-      assert.equal(calls, 1);
-      assert.deepEqual(images, ['fixture']);
-      assert.strictEqual(state.load('iphone-use.execution'), execution);
-    }
-  }
-});
-
-test('automatic image reading failure retains completed action for read-only recovery', async () => {
-  const payload = {ok: false, outcome: 'unknown', observation: {ok: true, result: {screenshot: '/missing.png'}}};
-  const execution = {exit_code: 1, output: JSON.stringify(payload)};
-  const state = memory();
-  const output = [];
-  await assert.rejects(new AsyncFunction('tools', 'text', 'store', 'image', 'load', start)({
-    exec_command: async () => execution,
-    view_image: async () => {throw new Error('image unavailable');}
-  }, value => output.push(value), state.store, () => assert.fail(), state.load), /image unavailable/);
-  assert.strictEqual(state.load('iphone-use.execution'), execution);
-  assert.deepEqual(output, [{exit_code: 1, ...payload}]);
 });

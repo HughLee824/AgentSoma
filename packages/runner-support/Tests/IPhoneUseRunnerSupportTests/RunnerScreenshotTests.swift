@@ -4,6 +4,41 @@ import ImageIO
 @testable import IPhoneUseRunnerSupport
 
 final class RunnerScreenshotTests: XCTestCase {
+    func testUprightPNGPassesThroughWithoutReencoding() throws {
+        let png = try fixture(orientation: 1)
+        for orientation in [1, 3, 4] {
+            let actual = try RunnerScreenshot.encoded(png: png, interfaceOrientation: orientation)
+            XCTAssertEqual(actual.png, png)
+            XCTAssertFalse(actual.reencoded)
+            XCTAssertEqual(actual.width, 4)
+            XCTAssertEqual(actual.height, 6)
+        }
+    }
+
+    func testEncodedPixelsMatchExistingOrientationPath() throws {
+        for exif in 1...8 {
+            let png = try fixture(orientation: exif)
+            for interface in 1...4 {
+                let expected = try RunnerScreenshot.image(png: png, interfaceOrientation: interface)
+                let actual = try RunnerScreenshot.encoded(png: png, interfaceOrientation: interface)
+                XCTAssertEqual(actual.reencoded, exif != 1 || interface == 2)
+                XCTAssertEqual(actual.width, expected.width)
+                XCTAssertEqual(actual.height, expected.height)
+                XCTAssertEqual(try pixels(ScreenImage(png: actual.png).image), try pixels(expected))
+            }
+        }
+    }
+
+    func testEncodedPathRejectsInvalidInput() throws {
+        let png = try fixture(orientation: 1)
+        for orientation in [0, 5, -1] {
+            XCTAssertThrowsError(try RunnerScreenshot.encoded(png: png, interfaceOrientation: orientation))
+        }
+        for data in [Data(), Data(png.prefix(32))] {
+            XCTAssertThrowsError(try RunnerScreenshot.encoded(png: data, interfaceOrientation: 1))
+        }
+    }
+
     func testUntaggedUpsideDownPixelsMatchExplicitEXIFHalfTurn() throws {
         let corrected = try RunnerScreenshot.image(png: fixture(orientation: 1), interfaceOrientation: 2)
         let tagged = try ScreenImage(png: fixture(orientation: 3)).image
