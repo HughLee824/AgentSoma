@@ -96,16 +96,33 @@ extension LiveSessionTests {
         let nodes: [[String: Any]] = try tree.enumerated().map { index, entry in
             let node = entry.node
             let frame = node.frame
-            return [
+            var attributes: [String: Any] = [
                 "index": index, "parent": entry.parent.map { $0 as Any } ?? NSNull(),
                 "identityToken": references.register(try RunnerAXBinding.identity(of: node)),
                 "type": node.elementType.rawValue, "identifier": node.identifier,
                 "label": node.label, "value": node.value ?? NSNull(), "enabled": node.isEnabled,
                 "frame": ["x": frame.minX, "y": frame.minY, "width": frame.width, "height": frame.height]
             ]
+            if [.textField, .secureTextField, .textView, .searchField].contains(node.elementType) {
+                attributes["keyboardFocus"] = observedKeyboardFocus(node, root: root) as Any? ?? NSNull()
+            }
+            return attributes
         }
         observedReferences = references
         return nodes
+    }
+
+    @MainActor
+    private func observedKeyboardFocus(_ node: XCUIElementSnapshot, root: XCUIElement) -> Bool? {
+        // Bind by AX identity, never by label or position. This is advisory observation
+        // data; performInput still resolves the target and reads focus before dispatch.
+        do {
+            guard let element = try RunnerAXBinding.bind(
+                snapshot: node, query: root.descendants(matching: .any)) as? XCUIElement,
+                try RunnerAXBinding.identity(of: node).isEqual(
+                    RunnerAXBinding.identity(of: freshSnapshot(element))) else { return nil }
+            return try RunnerAXBinding.keyboardFocus(of: element).boolValue
+        } catch { return nil }
     }
 
     @MainActor

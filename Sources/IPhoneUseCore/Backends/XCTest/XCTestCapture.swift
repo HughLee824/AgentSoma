@@ -8,7 +8,8 @@ enum XCTestCapture {
     static func actionResponse(
         _ response: [String: Any], directory: URL, expectedGuard: ScreenGuard? = nil,
         expectedMotion: SwipeMotion? = nil, expectedPinch: PinchMotion? = nil,
-        expectedPressDuration: Double? = nil, expectedHome: Bool = false, expectedKey: RunnerPressKey? = nil
+        expectedPressDuration: Double? = nil, expectedHome: Bool = false,
+        expectedFocus: Bool = false, expectedKey: RunnerPressKey? = nil
     ) throws -> [String: Any] {
         var result = response["result"] as? [String: Any] ?? [:]
         result["execution"] = response["execution"]
@@ -36,7 +37,11 @@ enum XCTestCapture {
                     guard (response["execution"] as? [String: Any])?["inputCompleted"] as? Bool == true else {
                         throw IPhoneUseError("missing_execution_facts", "Runner did not confirm primitive completion")
                     }
-                    do { try validateStability(response, result: result, expectedHome: false) } catch {
+                    do {
+                        if !verifiedFocusNoOp(response, expectedFocus: expectedFocus) {
+                            try validateStability(response, result: result, expectedHome: false)
+                        }
+                    } catch {
                         result["observationError"] = result["observationError"] ?? "invalid_post_action_observation"
                         result.removeValue(forKey: "stability")
                     }
@@ -52,6 +57,19 @@ enum XCTestCapture {
         decoded.removeValue(forKey: "stabilityReferenceBase64")
         decoded["result"] = result
         return decoded
+    }
+
+    private static func verifiedFocusNoOp(_ response: [String: Any], expectedFocus: Bool) -> Bool {
+        let result = response["result"] as? [String: Any]
+        let execution = response["execution"] as? [String: Any]
+        let input = result?["inputAction"] as? [String: Any]
+        return expectedFocus && result?["kind"] as? String == "focus"
+            && result?["noOp"] as? Bool == true && result?["resultVerified"] as? Bool == true
+            && execution?["started"] as? Bool == false && execution?["completed"] as? Bool == true
+            && execution?["inputCompleted"] as? Bool == true
+            && input?["eventAttempted"] as? Bool == false && input?["eventAcknowledged"] as? Bool == false
+            && input?["verification"] as? String == "confirmed"
+            && input?["automaticReplayAllowed"] as? Bool == false
     }
 
     static func decode(_ result: [String: Any]) throws -> CapturedObservation {

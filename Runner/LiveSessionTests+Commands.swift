@@ -37,12 +37,20 @@ extension LiveSessionTests {
         inputCompleted = true
         // Home is acknowledged system navigation. Its destination can contain
         // continuously animated icons; page readiness is left to observation.
-        if command["kind"] as? String == "home" { return result }
+        if skipsPostInputSampling(command) { return result }
         // Sampling failure cannot erase an acknowledged input. Observe separately.
         do { try await waitForStableFrame() } catch {
             postObservationError = "post_action_capture_unavailable"
         }
         return result
+    }
+
+    private func skipsPostInputSampling(_ command: [String: Any]) -> Bool {
+        // perform already re-bound the live target and checked focus. No event means
+        // no post-input transition to sample; --observe still captures a fresh frame.
+        let kind = command["kind"] as? String
+        return kind == "home" || (kind == "focus" && command["skipNoOpFocusSampling"] as? Bool == true
+            && inputAction?.confirmedNoEvent == true)
     }
 
     @MainActor

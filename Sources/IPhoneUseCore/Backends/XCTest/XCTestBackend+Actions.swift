@@ -69,6 +69,7 @@ extension XCTestBackend {
                 expectedPinch: target.gesture?.pinch,
                 expectedPressDuration: action.fields["duration"] as? Double,
                 expectedHome: action.kind == "home",
+                expectedFocus: action.kind == "focus",
                 expectedKey: action.kind == "press"
                     ? RunnerPressKey(rawValue: action.fields["key"] as? String ?? "") : nil))
     }
@@ -149,6 +150,8 @@ extension XCTestBackend {
             expected["path"] = target.path
         }
         fields["target"] = expected
+        // Additive opt-in: older hosts still receive their existing stability facts.
+        if action.kind == "focus" { fields["skipNoOpFocusSampling"] = true }
         guard try jsonData(fields).count <= 60_000 else {
             throw IPhoneUseError(
                 "target_too_large", "Target or screen guard exceeds the Runner request budget")

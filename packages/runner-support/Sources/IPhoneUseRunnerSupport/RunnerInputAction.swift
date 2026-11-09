@@ -16,6 +16,8 @@ public final class RunnerInputAction {
 
     public init() {}
 
+    public var confirmedNoEvent: Bool { !attempted && !acknowledged && verification == "confirmed" }
+
     public var facts: [String: Any] {
         var result: [String: Any] = [
             "eventAttempted": attempted, "eventAcknowledged": acknowledged,
