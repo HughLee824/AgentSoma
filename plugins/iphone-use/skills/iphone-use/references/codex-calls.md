@@ -1,116 +1,61 @@
-# Codex: execute and display in one call
+# Codex: call the CLI directly
 
-With `functions.exec` exposing `tools.exec_command`, use the start block for each selected CLI command. It prints completion/action facts and **displays an attached successful screenshot in the same invocation**, including `text-prepare`, `text-finish` and actions whose outcome is `unknown`. Inspect the emitted image before selecting the next action; do not separately call `view_image` or `observe` when it is already present.
-
-For `connect --progress`, first follow [connection progress](connection-progress.md): prompt the user while the command is still pending, and open any early preview URL only once. After connect, apply the shared [live-preview lifecycle](live-preview.md) before the first app observation/input. Run `preview --no-open` through this adapter, using the same CLI/environment/permissions as connect.
-
-After successful completion, open `result.url` **once in the Codex built-in browser**. Use the exposed in-app browser capability (for example `cua.createBrowserTab("iab", url, {visible: true})`) following its tool instructions; retain its tab handle for cleanup. If only `mcp__codex_app__open_in_codex` is available, use `target: {type: "browser", url: result.url}`. A `queued` result is pending, not proof that a page is visible; do not issue a second open request.
-
-Choose one mechanism, never both. Record the opening attempt before the call and keep the returned tab ID when available. If no built-in browser tool is exposed, provide the URL without opening a system browser. Do not run plain `preview` or shell `open` as a fallback. Preserve the per-session attempt/URL record across pending commands and turns. Explicit opt-out skips preview, and disconnect cleans up the owned service.
-
-## Start
-
-Keep the resolved CLI, configuration/state paths and working execution context for the entire device session. For an explicitly supplied prerelease, run `preflight.sh --candidate` with `IPHONE_USE_CLI` set to that binary; a plain preflight deliberately rejects prereleases.
-
-When task isolation is requested, create a short private runtime directory once (for example `umask 077; mktemp -d /private/tmp/iu.XXXXXX`, then create `config` and `state` inside it). Use the returned paths in the environment prefix below on **every** CLI call. Keep long evidence paths separate: the state root plus `/s` + 32 hex digits + `/ipc.sock` must fit within 103 UTF-8 bytes. Normal tasks can retain the CLI defaults.
-
-Change `argv` to the command: one literal string per argument, using the resolved executable and actual session/reference values. Keep the shell quoting, result storage and image branch intact. Example arguments after the executable: `["--session", "SESSION", "tap", "oN", "--x", "X", "--y", "Y", "--observe", "--agent-output"]`. Use supported options only.
+Use the CLI path returned by preflight. Choose each command from the current device evidence. Call the shell tool directly; when it is exposed through `functions.exec`, a thin invocation is enough:
 
 ```javascript
-const argv = ["iphone-use", "devices"];
-const cmd = argv.map(arg => "'" + arg.replace(/'/g, "'\\''") + "'").join(" ");
-const result = await tools.exec_command({
-  cmd,
-  ...(load("iphone-use.execution-context") ?? {}),
-  yield_time_ms: 10000,
-  max_output_tokens: 6000
-});
-store("iphone-use.execution", result);
-if (!Number.isInteger(result.exit_code)) {
-  text(result);
-} else {
-  let reply;
-  try { reply = JSON.parse(result.output); } catch {
-    const lines = result.output.trim().split("\n");
-    try { reply = JSON.parse(lines.at(-1)); } catch {}
-  }
-  text(reply ? {exit_code: result.exit_code, ...reply} : result);
-  if (reply?.observation?.ok === true && reply.observation.result?.screenshot) {
-    const screenshot = await tools.view_image({path: reply.observation.result.screenshot});
-    image(screenshot.image_url);
-  }
-}
-```
-
-Shell quoting preserves user quotes, dollar signs, backticks and newlines. `JSON.stringify` is not shell quoting; shell operators in `argv` are literal arguments. For isolated configuration/state, prefix `argv` with `"/usr/bin/env", "IPHONE_USE_CONFIG_DIR=/actual/short/config", "IPHONE_USE_STATE_DIR=/actual/short/state"`; there is no `--config` option. Use the execution tool's stdin/file mechanism for `--stdin`.
-
-If a tool permission error or CoreDevice diagnostic requires host execution, compare `devices` once using the tool's supported `sandbox_permissions: "require_escalated"` and a specific `justification`, consistent with active policy and authorization. These are tool options, not CLI arguments. Do not request elevation speculatively. If that approved discovery completes successfully, store the working context **before connect**:
-
-```javascript
-store("iphone-use.execution-context", {
+text(await tools.exec_command({
+  cmd: "'/ABSOLUTE/CLI/FROM/PREFLIGHT' devices",
   sandbox_permissions: "require_escalated",
-  justification: "Use the host execution context established by successful device discovery for this authorized iPhone task."
-});
-```
-
-The start block then requests the same context for connect and subsequent device commands, including disconnect. Each request remains subject to tool approval; this record is not an approval bypass. If the execution runtime resets, restore the context from the successful call's evidence instead of silently returning to the failing sandbox. A rejected approval is a blocker, not grounds to switch execution mechanisms.
-
-Correcting an omitted candidate flag, an overlong state path or a diagnosed execution-context mismatch before device input is not replaying a phone action. After resolving the concrete cause, one corrected startup attempt is appropriate unless the user prohibited retries. Before retrying a failed connect, inspect this task's state directory for startup/exit facts and a possibly live host; no returned session ID does not prove no host was created. Do not reconnect over an unresolved live session. If the corrected attempt fails the same way, stop and report the evidence. An unknown input outcome still never permits automatic replay.
-
-When acceptance evidence is requested, preserve command results and relevant `startup-error.json`, `host.log`, `config.json` and `exit.json` from owned state directories before cleanup. Verify owned-host termination before removing runtime state; do not delete another client's state. Use recorded tool/CLI timestamps for timing claims, not handwritten estimates.
-
-## Continue only if pending
-
-If `functions.exec` returns a running **cell ID**, resume with `functions.wait` first, never rerun the block. If the command returns a background **session_id**, use its actual numeric value below; this is not the iPhone-use device session. Continue until an exit code exists. Do not start another command while output is pending; it would replace the stored state. Keep waits short enough for progress updates.
-
-```javascript
-const sessionId = 12345;
-const previous = load("iphone-use.execution");
-if (previous?.session_id !== sessionId || Number.isInteger(previous.exit_code)) {
-  throw new Error("Use the running command's execution session ID");
-}
-const result = await tools.write_stdin({
-  session_id: sessionId,
-  chars: "",
+  justification: "Allow host CoreDevice access for this authorized iPhone task.",
   yield_time_ms: 10000,
   max_output_tokens: 6000
-});
-const execution = {...result, output: (previous.output ?? "") + (result.output ?? "")};
-store("iphone-use.execution", execution);
-if (!Number.isInteger(execution.exit_code)) {
-  text(result);
-} else {
-  let reply;
-  try { reply = JSON.parse(execution.output); } catch {
-    const lines = execution.output.trim().split("\n");
-    try { reply = JSON.parse(lines.at(-1)); } catch {}
-  }
-  text(reply ? {exit_code: execution.exit_code, ...reply} : execution);
-  if (reply?.observation?.ok === true && reply.observation.result?.screenshot) {
-    const screenshot = await tools.view_image({path: reply.observation.result.screenshot});
-    image(screenshot.image_url);
-  }
-}
+}));
 ```
 
-Exit status is process completion, not task success. Read `action.outcome` and `observation.ok` separately. A nonzero action exit can still include a fresh screenshot; never use `action && observe` or repeat input to recover output. A wrapper syntax error before tool execution did not reach the device.
+The permissions above apply to a known restricted environment: request approved host execution before the first device command to avoid the CoreDevice sandbox timeout. An unrestricted environment keeps its existing context. Every command remains subject to approval; never bypass a rejection. Keep the selected CLI and execution context through disconnect. Local preflight and file reads need no device permissions. Use a normal wait (for example 10000 ms) for ordinary commands, so brief actions can finish without an extra polling turn. Use a short wait (for example 1000 ms) for connect/setup progress so authorization messages remain visible.
 
-## Only if image reading failed
+Do not generate a JavaScript runner, reusable function, `eval`/`store` wrapper, JSON parser or custom polling loop. The CLI already returns execution facts. Read them directly. Invoke `connect --device DEVICE_ID --reuse --progress`, then the chosen session command, for example:
 
-The command facts are printed and stored before image loading. If that loading failed, retry this reader, not the command. It performs no device operation. Failed/skipped observations have no fresh image; follow their error and reference validity.
+```sh
+'/ABSOLUTE/CLI/FROM/PREFLIGHT' --session SESSION tap o1:e2 --observe --agent-output
+```
+
+Quote literal shell arguments correctly, especially text containing dollar signs, quotes or newlines. Use supported `--stdin` with a quoted here-document for complex text if helpful. Do not use `action && observe`: a nonzero action can still have a usable attached observation.
+
+## Evidence only when requested
+
+When preflight advertises native evidence, append `--evidence-dir` to connect and session commands. The CLI saves its final full receipt and any returned screenshot/snapshot in a unique private subdirectory, before returning:
+
+```sh
+'/ABSOLUTE/CLI/FROM/PREFLIGHT' --session SESSION tap o1:e2 --observe --agent-output --evidence-dir '/REQUESTED/EVIDENCE/DIRECTORY'
+```
+
+Use the same flag for connect/disconnect to retain mode and ownership receipts. `artifacts` contains durable paths; use them directly. This archives the final JSON response, not the progress stream. Keep `archiveErrors` separate from the action outcome and exit status. If copying fails, repair evidence without replaying input. Ordinary tasks can use the CLI alone.
+
+For an older CLI without this capability, the bundled helper remains a fallback in the same shell invocation:
+
+```sh
+set -o pipefail
+'/ABSOLUTE/CLI/FROM/PREFLIGHT' --session SESSION tap o1:e2 --observe --agent-output |
+  python3 '/ABSOLUTE/SKILL/DIRECTORY/scripts/agent-output.py' --evidence '/REQUESTED/EVIDENCE/DIRECTORY'
+```
+
+This fallback requires zsh/bash `pipefail` to preserve CLI failures; it forwards progress and archives stdout as well. Do not combine it with native evidence or change the selected CLI just to gain archival.
+
+## View the returned screenshot
+
+After completion, inspect the returned screenshot using the host image tool before choosing the next action. Prefer `artifacts.screenshot` when archived, otherwise the successful observation's screenshot path. A path printed in terminal output is not a viewed image. If the image tool is exposed through `functions.exec`:
 
 ```javascript
-const execution = load("iphone-use.execution");
-if (!Number.isInteger(execution?.exit_code)) {
-  text({pending: true, execution});
-} else {
-  const reply = JSON.parse(execution.output);
-  text({exit_code: execution.exit_code, ...reply});
-  if (reply.observation?.ok === true) {
-    const screenshot = await tools.view_image({path: reply.observation.result.screenshot});
-    image(screenshot.image_url);
-  }
-}
+image((await tools.view_image({path: "/RETURNED/SCREENSHOT/PATH.png"})).image_url);
 ```
 
-Use `--agent-output` when available; consult its private full receipt only for a concrete question. A displayed image still needs visual judgment: `completed` is not task success, and `unknown` never authorizes automatic replay.
+Read the image even when the CLI exit is nonzero, provided the observation succeeded. If image loading fails, retry only the image read. Do not repeat the device command or take another screenshot solely to recover this image. The original execution facts remain in the shell result and, when requested, the archived full receipt.
+
+## Pending execution
+
+When the shell returns a numeric execution `session_id`, continue that handle with the host's wait/input tool and empty input. When `functions.exec` returns a cell ID, use `functions.wait`. These handles are not iPhone-use session IDs. Never restart a command because it is still running. Use short waits for connect progress and relay `requiresUserAction=true` promptly. For an example, see [continuation](codex-continuation.md) only if needed.
+
+Keep earlier output chunks: a chunk is not a complete reply. Wait for process completion, then distinguish action outcome, observation success and task success. Partial or unknown execution never authorizes replay.
+
+When preview is requested/defaulted, read [live preview](live-preview.md). If preview was declined, skip both startup and that reference. Read [access recovery](access-recovery.md) only for an actual access failure; normal execution needs no additional adapter references.

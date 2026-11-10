@@ -142,9 +142,15 @@ final class XCTestBackend: SessionBackend {
         onInputStarted: (() -> Void)? = nil
     ) throws -> [String: Any] {
         guard let transport else { throw IPhoneUseError("backend_unavailable", "Runner is not connected") }
+        let began = ProcessInfo.processInfo.systemUptime
+        let requestID = UUID().uuidString
+        var timing: [String: Any] = ["operation": operation, "requestID": requestID]
+        defer { recordTiming("request", since: began, facts: timing) }
         var request = fields
         if !["ping", "shutdown"].contains(operation) {
+            let displayBegan = ProcessInfo.processInfo.systemUptime
             let display = try NativeDisplay(deviceInfo("displays", timeout: expectedDisplay == nil ? 20 : 3))
+            timing["displayQueryMs"] = (ProcessInfo.processInfo.systemUptime - displayBegan) * 1000
             try Self.validatePreviewDisplay(display, expected: expectedDisplay)
             request["displayID"] = display.id
             request["displayContext"] = try jsonObject(JSONEncoder().encode(display.context))
@@ -153,10 +159,11 @@ final class XCTestBackend: SessionBackend {
                 throw IPhoneUseError("screen_context_changed", "Active display changed; observe before choosing input")
             }
         }
-        request["id"] = UUID().uuidString
+        request["id"] = requestID
         request["token"] = token
         request["op"] = operation
         if onInputStarted != nil { request["inputProgress"] = true }
+        let exchangeBegan = ProcessInfo.processInfo.systemUptime
         let response = try transport.exchange(
             request, timeout: timeout,
             onProgress: onInputStarted.map { callback in
@@ -168,15 +175,31 @@ final class XCTestBackend: SessionBackend {
                     callback()
                 }
             })
+        timing["exchangeMs"] = (ProcessInfo.processInfo.systemUptime - exchangeBegan) * 1000
+        timing["runnerMs"] = response["runnerMs"]
+        timing["runnerTiming"] = response["runnerTiming"]
         if let identity, response["sessionId"] as? String != identity {
             throw TransportError(
                 description: "Runner session changed; reconnect and observe", possiblySent: true)
         }
         if let expectedDisplay {
+            let displayBegan = ProcessInfo.processInfo.systemUptime
             try Self.validatePreviewDisplay(
                 NativeDisplay(deviceInfo("displays", timeout: 3)), expected: expectedDisplay)
+            timing["postDisplayQueryMs"] = (ProcessInfo.processInfo.systemUptime - displayBegan) * 1000
         }
         return response
+    }
+
+    func recordTiming(_ phase: String, since began: TimeInterval, facts: [String: Any] = [:]) {
+        var entry = facts
+        entry["phase"] = phase
+        entry["elapsedMs"] = (ProcessInfo.processInfo.systemUptime - began) * 1000
+        // Private host diagnostics only. Never include input text, UI contents or
+        // tokens, and never let diagnostic serialization change execution facts.
+        if let data = try? jsonData(entry), let text = String(data: data, encoding: .utf8) {
+            print("IPHONE_USE_TIMING " + text)
+        }
     }
 
     func status() throws -> [String: Any] {

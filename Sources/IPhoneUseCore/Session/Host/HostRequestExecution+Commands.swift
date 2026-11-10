@@ -35,7 +35,13 @@ extension HostRequestExecution {
 
     func observe() throws {
         observations.invalidate("superseded")
-        response["result"] = try observations.store(backend.observe())
+        let capture = try backend.observe()
+        let began = ProcessInfo.processInfo.systemUptime
+        defer {
+            let elapsed = (ProcessInfo.processInfo.systemUptime - began) * 1000
+            print("IPHONE_USE_OBSERVATION_STORE elapsedMs=\(elapsed)")
+        }
+        response["result"] = try observations.store(capture)
         effective = true
     }
 

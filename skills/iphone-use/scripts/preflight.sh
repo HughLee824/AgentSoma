@@ -55,19 +55,23 @@ if printf '%s\n' "$tap_help" | grep -q -- '--agent-output'; then
   echo 'Agent output: available. Use --agent-output for actions and native text preparation/finish; full receipt saved locally.'
 fi
 if text_help=$("$cli" text-prepare --help 2>/dev/null) && printf '%s\n' "$text_help" | grep -q -- '--field-rect'; then
-  echo 'Scoped text preparation: available. Before the first input, text-prepare once; then inspect the returned screenshot and focus the field if needed.'
+  echo 'Scoped standard text preparation: available. Use native-text.md before standard input; Runner uses element typing.'
 fi
 if setup_help=$("$cli" setup --help 2>/dev/null) &&
    printf '%s\n' "$setup_help" | grep -q -- '--preview' &&
    printf '%s\n' "$setup_help" | grep -q -- '--progress'; then
-  echo 'Setup preview: available. For an authorized packaged Runner setup, use setup --progress --preview (or --no-preview when opted out); relay progress and reuse the original tab before authorization completes. Follow the selected executable preview finish rules after verification.'
+  echo 'Setup preview: available. Read connection-progress.md only if setup is needed.'
 fi
 connect_help=$("$cli" connect --help)
+if printf '%s\n' "$tap_help" | grep -q -- '--evidence-dir' &&
+   printf '%s\n' "$connect_help" | grep -q -- '--evidence-dir'; then
+  echo 'Native evidence: available. When archival is requested, add --evidence-dir DIR to connect and session commands; use artifacts paths. No output helper needed.'
+fi
 if printf '%s\n' "$connect_help" | grep -q -- '--reuse'; then
   echo 'Session reuse: available. Use connect --reuse; record reused/lifecycle. Borrowed sessions and their preview remain running at task completion unless explicitly asked to disconnect. sessions lists existing endpoints.'
 fi
 if printf '%s\n' "$connect_help" | grep -q -- '--progress'; then
-  echo 'Connection progress: available. Use connect --progress, relay human-action events immediately, and keep the same pending command. Runner can add --preview to show authorization before readiness; --port overrides the startup preview port.'
+  echo 'Connection progress: available. Use --progress; relay human-action events and resume the same execution.'
 fi
 if printf '%s\n' "$connect_help" | grep -q -- '--mode'; then
   echo 'Control modes: available. Honor saved mode unless the user explicitly selects standard or runner.'
@@ -88,5 +92,5 @@ fi
 echo 'Next: iphone-use devices. A successful preflight does not validate device trust or signing.'
 
 if "$cli" focus --help >/dev/null 2>&1 && "$cli" clear --help >/dev/null 2>&1; then
-  echo 'Explicit Runner actions: available. Read references/runner-actions.md; focus and inspect before type. Replace/append are agent workflows, not implicit modes.'
+  echo 'Explicit Runner actions: available. Type directly when current evidence confirms field focus; otherwise focus and inspect. Read runner-actions.md for editing workflows.'
 fi

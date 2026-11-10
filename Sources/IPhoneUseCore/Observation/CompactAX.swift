@@ -79,6 +79,10 @@ enum CompactAX {
             line += " id=\(brief(node.identifier))"
         }
         if !node.enabled { line += " disabled" }
+        if input {
+            let focus = node.attributes["keyboardFocus"] as? Bool
+            line += " keyboard_focus=\(focus.map { $0 ? "true" : "false" } ?? "unknown")"
+        }
         if clipped { line += " detail_clipped=true" }
         return line
     }

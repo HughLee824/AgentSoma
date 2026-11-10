@@ -10,6 +10,7 @@ final class RunnerInputActionTests: XCTestCase {
         XCTAssertThrowsError(try action.send(focused: false) { sends += 1 })
         XCTAssertEqual(sends, 0)
         XCTAssertFalse(action.attempted)
+        XCTAssertFalse(action.confirmedNoEvent)
     }
 
     func testTypeAcknowledgesOnceWithoutPostInputLayoutValidation() throws {
@@ -18,6 +19,7 @@ final class RunnerInputActionTests: XCTestCase {
         try action.send(focused: true) { text += "ASCII-BEGIN|abcdefghijklmnopqrstuvwxyz|ASCII-END" }
         XCTAssertEqual(text, "ASCII-BEGIN|abcdefghijklmnopqrstuvwxyz|ASCII-END")
         XCTAssertTrue(action.acknowledged)
+        XCTAssertFalse(action.confirmedNoEvent)
         XCTAssertEqual(action.verification, "not_requested")
     }
 
@@ -29,12 +31,14 @@ final class RunnerInputActionTests: XCTestCase {
         XCTAssertEqual(sends, 1)
         XCTAssertTrue(action.attempted)
         XCTAssertFalse(action.acknowledged)
+        XCTAssertFalse(action.confirmedNoEvent)
     }
 
     func testFocusNoOpAndChangedPageAfterTap() throws {
         var taps = 0
         let noOp = RunnerInputAction()
         try noOp.focus(isFocused: true, event: { taps += 1 }, verify: { XCTFail("Unexpected callback"); return false })
+        XCTAssertTrue(noOp.confirmedNoEvent)
         XCTAssertEqual(noOp.verification, "confirmed")
         XCTAssertEqual(taps, 0)
         let navigated = RunnerInputAction()

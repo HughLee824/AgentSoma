@@ -52,6 +52,8 @@ extension XCTestBackend {
 
     func apps() throws -> AppCatalog {
         guard let deviceUDID else { throw IPhoneUseError("backend_unavailable", "Device is not connected") }
+        let began = ProcessInfo.processInfo.systemUptime
+        defer { recordTiming("appCatalog", since: began) }
         return try AppCatalog(
             CoreDevice.read(["device", "info", "apps", "--device", deviceUDID, "--include-all-apps"]))
     }
@@ -61,6 +63,8 @@ extension XCTestBackend {
         let response = try request(
             "act", fields: Self.actionFields(action, target: target),
             onInputStarted: target.gesture == nil ? nil : onInputStarted)
+        let began = ProcessInfo.processInfo.systemUptime
+        defer { recordTiming("actionDecode", since: began, facts: ["requestID": response["id"] ?? "missing"]) }
         return try ActionReply.decode(
             XCTestCapture.actionResponse(
                 response, directory: paths.directory,
@@ -69,6 +73,7 @@ extension XCTestBackend {
                 expectedPinch: target.gesture?.pinch,
                 expectedPressDuration: action.fields["duration"] as? Double,
                 expectedHome: action.kind == "home",
+                expectedFocus: action.kind == "focus",
                 expectedKey: action.kind == "press"
                     ? RunnerPressKey(rawValue: action.fields["key"] as? String ?? "") : nil))
     }
@@ -149,6 +154,8 @@ extension XCTestBackend {
             expected["path"] = target.path
         }
         fields["target"] = expected
+        // Additive opt-in: older hosts still receive their existing stability facts.
+        if action.kind == "focus" { fields["skipNoOpFocusSampling"] = true }
         guard try jsonData(fields).count <= 60_000 else {
             throw IPhoneUseError(
                 "target_too_large", "Target or screen guard exceeds the Runner request budget")
@@ -158,6 +165,8 @@ extension XCTestBackend {
 
     func observe() throws -> CapturedObservation {
         let response = try request("observe")
+        let began = ProcessInfo.processInfo.systemUptime
+        defer { recordTiming("observationDecode", since: began, facts: ["requestID": response["id"] ?? "missing"]) }
         guard let result = response["result"] as? [String: Any],
             response["ok"] as? Bool == true || result["axStatus"] as? String == "unavailable"
         else {

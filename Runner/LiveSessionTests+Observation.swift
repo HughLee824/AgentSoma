@@ -22,16 +22,22 @@ extension LiveSessionTests {
 
     @MainActor
     func captureScreen() throws -> CapturedScreen {
+        let began = ProcessInfo.processInfo.systemUptime
         let screenshot = try selectedScreen().screenshot()
-        let image = try RunnerScreenshot.image(
-            png: screenshot.pngRepresentation, interfaceOrientation: commandDisplayContext?.orientation ?? 0)
-        let data = NSMutableData()
-        guard let destination = CGImageDestinationCreateWithData(data, "public.png" as CFString, 1, nil) else {
-            throw CommandError("screenshot_unavailable")
-        }
-        CGImageDestinationAddImage(destination, image, nil)
-        guard CGImageDestinationFinalize(destination) else { throw CommandError("screenshot_unavailable") }
-        return CapturedScreen(png: data as Data, width: image.width, height: image.height)
+        addTiming("screenshotRequest", since: began)
+        let pngBegan = ProcessInfo.processInfo.systemUptime
+        let png = screenshot.pngRepresentation
+        addTiming("screenshotPNG", since: pngBegan)
+        let normalizeBegan = ProcessInfo.processInfo.systemUptime
+        let encoded = try RunnerScreenshot.encoded(
+            png: png, interfaceOrientation: commandDisplayContext?.orientation ?? 0)
+        addTiming("normalizePNG", since: normalizeBegan)
+        phaseTimings[encoded.reencoded ? "reencodedFrames" : "originalPNGFrames", default: 0] += 1
+        return CapturedScreen(png: encoded.png, width: encoded.width, height: encoded.height)
+    }
+
+    func addTiming(_ phase: String, since began: TimeInterval) {
+        phaseTimings[phase + "Ms", default: 0] += (ProcessInfo.processInfo.systemUptime - began) * 1000
     }
 
     func freshSnapshot(_ element: XCUIElement) throws -> XCUIElementSnapshot {
@@ -43,6 +49,8 @@ extension LiveSessionTests {
 
     @MainActor
     func waitForStableFrame() async throws {
+        let began = ProcessInfo.processInfo.systemUptime
+        defer { addTiming("postActionSampling", since: began) }
         var stability = FrameStability(
             startedAt: ProcessInfo.processInfo.systemUptime,
             context: postInputContext, textFields: postInputTextFields)
@@ -54,10 +62,12 @@ extension LiveSessionTests {
             let captureFinished = ProcessInfo.processInfo.systemUptime
             let capturedAt = Date().timeIntervalSince1970
             let png = screenshot.png
+            let compareBegan = ProcessInfo.processInfo.systemUptime
             let fingerprint = try FrameFingerprint(png: png)
             stability.record(
                 frame: fingerprint, png: png, capturedAt: captureFinished,
                 processedAt: ProcessInfo.processInfo.systemUptime)
+            addTiming("frameComparison", since: compareBegan)
             frameStability = stability
             actionFrame = ActionFrame(png: png, capturedAt: capturedAt, fingerprint: fingerprint)
             try checkIssues()
@@ -96,16 +106,33 @@ extension LiveSessionTests {
         let nodes: [[String: Any]] = try tree.enumerated().map { index, entry in
             let node = entry.node
             let frame = node.frame
-            return [
+            var attributes: [String: Any] = [
                 "index": index, "parent": entry.parent.map { $0 as Any } ?? NSNull(),
                 "identityToken": references.register(try RunnerAXBinding.identity(of: node)),
                 "type": node.elementType.rawValue, "identifier": node.identifier,
                 "label": node.label, "value": node.value ?? NSNull(), "enabled": node.isEnabled,
                 "frame": ["x": frame.minX, "y": frame.minY, "width": frame.width, "height": frame.height]
             ]
+            if [.textField, .secureTextField, .textView, .searchField].contains(node.elementType) {
+                attributes["keyboardFocus"] = observedKeyboardFocus(node, root: root) as Any? ?? NSNull()
+            }
+            return attributes
         }
         observedReferences = references
         return nodes
+    }
+
+    @MainActor
+    private func observedKeyboardFocus(_ node: XCUIElementSnapshot, root: XCUIElement) -> Bool? {
+        // Bind by AX identity, never by label or position. This is advisory observation
+        // data; performInput still resolves the target and reads focus before dispatch.
+        do {
+            guard let element = try RunnerAXBinding.bind(
+                snapshot: node, query: root.descendants(matching: .any)) as? XCUIElement,
+                try RunnerAXBinding.identity(of: node).isEqual(
+                    RunnerAXBinding.identity(of: freshSnapshot(element))) else { return nil }
+            return try RunnerAXBinding.keyboardFocus(of: element).boolValue
+        } catch { return nil }
     }
 
     @MainActor
@@ -117,18 +144,22 @@ extension LiveSessionTests {
         observedReferences = RunnerAXReferences()
         var axError = error
         if let root {
+            let axBegan = ProcessInfo.processInfo.systemUptime
+            defer { addTiming("axCapture", since: axBegan) }
             do {
                 nodes = try captureNodes(root)
             } catch { axError = String(describing: error) }
         }
         let snapshotFinished = Date().timeIntervalSince1970
         let frame = commandDisplayContext?.screen.cgRect
+        let contextBegan = ProcessInfo.processInfo.systemUptime
         var context: Any = NSNull()
         if let app, let root,
             let encoded = try? JSONEncoder().encode(screenContext(app: app, root: root)),
             let object = try? JSONSerialization.jsonObject(with: encoded) {
             context = object
         }
+        addTiming("screenContext", since: contextBegan)
         let screenshot = try captureScreen()
         return [
             "bundleId": scope == "systemAlert"

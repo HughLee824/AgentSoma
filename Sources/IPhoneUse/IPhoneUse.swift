@@ -4,6 +4,7 @@ import Foundation
 
 struct SessionOptions: ParsableArguments {
     @Option(help: "Session identifier returned by connect.") var session: String?
+    @OptionGroup var evidence: EvidenceOptions
 
     func requiredSession() throws -> String {
         guard let session else { throw ValidationError("--session is required") }
@@ -30,7 +31,21 @@ struct IPhoneUse: ParsableCommand {
     @OptionGroup var options: SessionOptions
 }
 
-func output(compact: Bool = false, agentOutput: Bool = false, _ operation: () throws -> [String: Any]) throws {
+struct EvidenceOptions: ParsableArguments {
+    @Option(
+        name: .customLong("evidence-dir"),
+        help: "Save a private receipt and returned observation files here; never retries input.")
+    var directory: String?
+
+    mutating func validate() throws {
+        if let directory, directory.isEmpty { throw ValidationError("--evidence-dir must not be empty") }
+    }
+}
+
+func output(
+    compact: Bool = false, agentOutput: Bool = false, evidenceDir: String? = nil,
+    _ operation: () throws -> [String: Any]
+) throws {
     let response: [String: Any]
     do { response = try operation() } catch {
         response = [
@@ -41,13 +56,16 @@ func output(compact: Bool = false, agentOutput: Bool = false, _ operation: () th
             ]
         ]
     }
-    if compact, response["ok"] as? Bool == true, let result = response["result"] as? [String: Any],
+    let presented = evidenceDir.map {
+        EvidenceArchive.render(response, directory: URL(fileURLWithPath: $0), agentOutput: agentOutput)
+    } ?? (agentOutput ? AgentOutput.render(response) : response)
+    if compact, evidenceDir == nil, response["ok"] as? Bool == true, let result = response["result"] as? [String: Any],
         let text = result["text"] as? String {
         print(text)
     } else {
         print(
             String(
-                data: try jsonData(agentOutput ? AgentOutput.render(response) : response), encoding: .utf8)!)
+                data: try jsonData(presented), encoding: .utf8)!)
     }
     if response["ok"] as? Bool != true { throw ExitCode.failure }
 }
@@ -73,9 +91,11 @@ struct ActionObservationOptions: ParsableArguments {
     ) var observe = false
 }
 
-func outputAction(session: String, observe: Bool, agentOutput: Bool, _ operation: () throws -> [String: Any])
-    throws {
-    try output(agentOutput: agentOutput) {
+func outputAction(
+    session: String, observe: Bool, agentOutput: Bool, evidenceDir: String? = nil,
+    _ operation: () throws -> [String: Any]
+) throws {
+    try output(agentOutput: agentOutput, evidenceDir: evidenceDir) {
         let action = try operation()
         return observe ? SessionClient.observing(session: session, action: action) : action
     }

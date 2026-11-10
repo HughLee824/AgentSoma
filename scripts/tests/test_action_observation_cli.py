@@ -77,6 +77,28 @@ class ActionObservationCLITests(unittest.TestCase):
             self.assertTrue(result.stdout, f"CLI returned no JSON: exit={result.returncode}, stderr={result.stderr!r}, requests={requests!r}")
             return result.returncode, json.loads(result.stdout), requests
 
+    def test_native_evidence_preserves_exit_and_never_replays_on_copy_failure(self):
+        with tempfile.TemporaryDirectory() as evidence:
+            for outcome in ("completed", "unknown", "not_dispatched", "prepared"):
+                code, response, requests = self.run_cli(
+                    ["tap", "o1:e2", "--observe", "--agent-output", "--evidence-dir", evidence],
+                    outcome=outcome, refresh=True)
+                self.assertEqual(code, 0 if outcome in ("completed", "prepared") else 1)
+                self.assertEqual([r["op"] for r in requests], ["tap", "observe"])
+                self.assertEqual(response["action"]["outcome"], outcome)
+                self.assertTrue(response["archiveErrors"])  # Fixture capture path is absent.
+                saved = json.loads(Path(response["artifacts"]["receipt"]).read_text())
+                self.assertEqual(saved["action"]["outcome"], outcome)
+                self.assertEqual(saved["observation"], response["observation"])
+
+    def test_native_evidence_on_observe_returns_json_and_preserves_one_capture(self):
+        with tempfile.TemporaryDirectory() as evidence:
+            code, response, requests = self.run_cli(["observe", "--evidence-dir", evidence])
+            self.assertEqual(code, 0)
+            self.assertEqual([r["op"] for r in requests], ["observe"])
+            self.assertEqual(response["result"]["text"], "observation=o2 refs=current")
+            self.assertTrue(Path(response["artifacts"]["receipt"]).is_file())
+
     def test_explicit_input_primitives_use_new_protocol_once_without_hidden_steps(self):
         for args in (["focus", "o1:e2"], ["clear", "o1:e2"],
                      ["type", "o1:e2", "--text", "once"],

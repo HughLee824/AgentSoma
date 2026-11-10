@@ -239,6 +239,14 @@ The printed response retains errors, recovery, clipboard transaction state and t
 
 If saving the receipt fails, the CLI emits the original full response plus `agentOutputError`; it does not replace the execution outcome or retry the action. Without the flag, the existing JSON output is unchanged. See the [native text workflow](../skills/iphone-use/references/native-text.md) and [Codex call template](../skills/iphone-use/references/codex-calls.md).
 
+## Native evidence archive
+
+`connect` and session commands accept optional `--evidence-dir DIR`. The CLI writes its original final response to `receipt.json` and copies any successful returned observation's screenshot and snapshot into a unique `iphone-use-UUID` subdirectory. It returns absolute `artifacts.receipt`, `artifacts.screenshot` and `artifacts.snapshot` paths for the files actually saved. The full receipt retains the original capture paths; use `artifacts` for durable copies after disconnect. A command without a capture saves only its receipt. No extra observation or device call is performed, and progress events are still streamed rather than archived in the final receipt.
+
+The created directory is `0700` and files are `0600`; existing parent directory permissions remain unchanged. Evidence may contain private screen contents. Archive only to a task-owned location and retain it only as needed. `observe` and `inspect` return JSON rather than compact text when this flag is present, so archive paths are visible.
+
+With `--agent-output`, the same archived full receipt backs the concise response; no second temporary receipt is created. Partial archival failure returns the original full response, available artifact paths and `archiveErrors`. Archival failure does not change the device outcome or command exit status, trigger retries, or establish task success. Repair storage or copy surviving files without repeating input. Without `--evidence-dir`, existing output remains unchanged.
+
 ## 纯剪贴板与触摸粘贴（两种模式）
 
 显式 `--method touch-paste` 可在 standard 和 runner 中使用；默认输入方式不变。它只通过 Apple 剪贴板服务备份并暂存文本，不调用 typeText、不创建键盘、不发送 Command-A/V 或 Return。后续长按与点击仍走所选后端的既有屏幕守卫。这个方式用于会因键盘切换或快捷键授权弹窗而关闭的编辑器；它不保证每个 App 都提供 Paste 菜单。
